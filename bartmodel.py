@@ -47,34 +47,36 @@ from transformers.models.bart.modeling_bart import (
     add_start_docstrings_to_model_forward,
 )
 
+import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 logger = logging.get_logger(__name__)
 device = torch.device("cuda")
-tmp = 1
 
-# @dataclass
-# class CustomSeq2SeqLMOutput(Seq2SeqLMOutput):
-    # loss: Optional[torch.FloatTensor] = None
-    # logits: torch.FloatTensor = None
-    # past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    # decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    # decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    # cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    # encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    # encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    # encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    # ctr_loss: torch.FloatTensor = None
+@dataclass
+class CustomSeq2SeqLMOutput(Seq2SeqLMOutput):
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    ctr_loss: torch.FloatTensor = None
 
-# @dataclass
-# class CustomSeq2SeqModelOutput(Seq2SeqModelOutput):
-    # last_hidden_state: torch.FloatTensor = None
-    # past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    # decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    # decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    # cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    # encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    # encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    # encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    # ctr_speaker_loss: torch.FloatTensor = None
+@dataclass
+class CustomSeq2SeqModelOutput(Seq2SeqModelOutput):
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    ctr_speaker_loss: torch.FloatTensor = None
 
 class BartModel(BartPretrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
@@ -107,65 +109,58 @@ class BartModel(BartPretrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def speaker_aware(self, enc_speaker, ctr_margin, speaker_input_ids, bench_speaker, sampling=0):
-        print(f"============================================")
-        print(f"turn_num = enc_speaker.shape : {enc_speaker.shape[0]}")
+    def speaker_aware(self, enc_speaker, ctr_margin, speaker_input_ids, bench_speaker):
+        print(f"speaker!!")
+        # print(f"============================================")
+        # print(f"turn_num = enc_speaker.shape : {enc_speaker.shape[0]}")
         # print(f"enc_speaker : {enc_speaker}")
 
-        negative_sim, positive_sim = torch.empty(1, device=device), torch.empty(1, device=device)
-        print(f"negative_sim : {negative_sim}, positive_sim : {positive_sim}")
+        enc_negative, enc_positive = [], []
 
         num_turn = enc_speaker.shape[0]
         # cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+        # sim = torch.dist(enc_speaker[i], enc_speaker[bench_speaker], p=2.0)
 
         for i in range(1, num_turn):
-            print(f"{speaker_input_ids[i], speaker_input_ids[bench_speaker]}=============================")
-            sim = torch.dist(enc_speaker[i], enc_speaker[bench_speaker], p=2.0)
-            sim = torch.dist(enc_speaker[i], enc_speaker[bench_speaker], p=1.0)
+            # print(f"{speaker_input_ids[i], speaker_input_ids[bench_speaker]}=============================")
             if speaker_input_ids[i] == speaker_input_ids[bench_speaker]:
-                print("same")
-                positive_sim = torch.row_stack((positive_sim, sim))
+                # print("same")
+                enc_positive.append(enc_speaker[i])
             else:
-                print("diff")
-                negative_sim = torch.row_stack((negative_sim, sim))
-        
-        i = 0
-        positive_sim = torch.cat([positive_sim[0:i], positive_sim[i+1:]])
-        negative_sim = torch.cat([negative_sim[0:i], negative_sim[i+1:]])
-        positive_sim_idx = positive_sim.shape[0]
-        negative_sim_idx = negative_sim.shape[0]
+                # print("diff")
+                enc_negative.append(enc_speaker[i])
 
         # print(f"positive_sim_idx : {positive_sim_idx}")
         # print(f"negative_sim_idx : {negative_sim_idx}")
 
-        # print(f"=soft_positive_sim={positive_sim}")
-        # print(f"=soft_negative_sim={negative_sim}")
+        if len(enc_positive) > 0 and len(enc_negative) > 0:
+            # print(f"enc_positive : {enc_positive}")
+            # print(f"enc_negative : {enc_negative}")
+            positive_sample = random.choice(enc_positive)
+            negative_sample = random.choice(enc_negative)
+            positive_sim = torch.dist(positive_sample, enc_speaker[bench_speaker], p=2.0)
+            negative_sim = torch.dist(negative_sample, enc_speaker[bench_speaker], p=2.0)
+        else:
+            # print(f"1, {device}")
+            ctr_speaker_loss = torch.zeros(1, device=device)
+            # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
+            return ctr_speaker_loss
 
-        softmax_sim = torch.cat([positive_sim, negative_sim])
+        # print(f"=positive_sim={positive_sim}")
+        # print(f"=negative_sim={negative_sim}")
+        softmax_sim = torch.Tensor([1 - positive_sim, 1 - negative_sim])
+        # print(f"softmax_sim : {softmax_sim}")
         softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
         # print(f"softmax_sim_out : {softmax_sim_out}")
 
         relu = nn.ReLU()
-        if sampling == 0: # Random 1 Sampling
-            positive_softmax = softmax_sim_out[random.randrange(positive_sim_idx)]
-            negative_softmax = softmax_sim_out[random.randrange(positive_sim_idx, positive_sim_idx+negative_sim_idx)]
-        elif sampling == 1: # Max 1 Sampling
-            print(f"softmax_sim_out : {len(softmax_sim_out)}")
-            print(f"positive_sim_idx : {positive_sim_idx}, positive + negative_sim_idx : {positive_sim_idx+negative_sim_idx}")
-            print(f"softmax_sim_out[:positive_sim_idx] : {softmax_sim_out[:positive_sim_idx].shape}")
-            if len(softmax_sim_out[:positive_sim_idx]) == 0:
-                positive_softmax = 0
-                negative_softmax = max(softmax_sim_out[positive_sim_idx:positive_sim_idx+negative_sim_idx])
-            elif len(softmax_sim_out[positive_sim_idx:positive_sim_idx+negative_sim_idx]) == 0:
-                positive_softmax = max(softmax_sim_out[:positive_sim_idx])
-                negative_softmax = 0
-            else:
-                positive_softmax = max(softmax_sim_out[:positive_sim_idx])
-                negative_softmax = max(softmax_sim_out[positive_sim_idx:positive_sim_idx+negative_sim_idx])
-        print(f"positive_softmax : {positive_softmax}")
-        print(f"negative_softmax : {negative_softmax}")
+        positive_softmax = softmax_sim_out[0]
+        negative_softmax = softmax_sim_out[1]
+        # print(f"positive_softmax : {positive_softmax}")
+        # print(f"negative_softmax : {negative_softmax}")
 
         ctr_speaker_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
+        # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
         return ctr_speaker_loss
     
     def topic_aware(self, enc_utterance, ctr_margin, cluster_mode, raw_data):
@@ -323,7 +318,8 @@ class BartModel(BartPretrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         all_special_ids: Optional[List] = None,
-        raw_data: Optional[datasets.dataset_dict.DatasetDict] = None
+        raw_data: Optional[datasets.dataset_dict.DatasetDict] = None,
+        ctr_mode: int = 0,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
@@ -370,65 +366,76 @@ class BartModel(BartPretrainedModel):
         # print(f"input_ids : {input_ids[0]}")
         # print(f"all_special_ids : {all_special_ids}")
 
-        # if all_special_ids is not None:
-        #     sep_idx = [idx for ids, idx in zip(input_ids[0], range(input_ids.shape[1])) if ids == all_special_ids[4]]
-        #     sep_idx.append(input_ids.shape[1])
-        #     speaker_idx = [element+1 for element in sep_idx[:-1]]
-        #     utterance_idx = [[start+3, end-1] for start, end in zip(sep_idx[:-1], sep_idx[1:])]
-        
-        # print(f"sep_idx : {sep_idx}")
-        # print(f"speaker_idx : {speaker_idx}")
-        # print(f"utterance_idx : {utterance_idx}")
-        # print(f"all_special_ids : {all_special_ids}")
+        if all_special_ids is not None:
+            sep_idx = [idx for ids, idx in zip(input_ids[0], range(input_ids.shape[1])) if ids == all_special_ids[4]]
+            sep_idx.append(input_ids.shape[1])
+            speaker_idx = [element+1 for element in sep_idx[:-1]]
+            utterance_idx = [[start+3, end-1] for start, end in zip(sep_idx[:-1], sep_idx[1:])]
+            speaker_input_ids = [input_ids[0][i] for i in speaker_idx]
 
-        # no_padding_len = []
-        # for i in input_ids:
-        #     cnt = 0
-        #     for j in i[4:]:
-        #         if j != 3:
-        #             cnt += 1
-        #     no_padding_len.append(cnt)
-        # print(f"[encoder_outputs[0][0][i] for i in speaker_idx] : {}")
+        if ctr_mode == 0: # 기존 koBART만 Training
+            ctr_speaker_loss = torch.zeros(1, device=device)
+        elif ctr_mode == 1: # koBART + Spaeker-view
+            # 나중에 고쳐!!
+            if all_special_ids is not None:
+                # print(f"sep_idx : {sep_idx}")
+                # print(f"speaker_idx : {speaker_idx}")
+                # print(f"utterance_idx : {utterance_idx}")
+                # print(f"all_special_ids : {all_special_ids}")
 
-        # Speaker Token의 Encoder Representation
-        # speaker_input_ids = [input_ids[0][i] for i in speaker_idx]
-        
-        # print(f"speaker_input_ids : {speaker_input_ids}")
-        # print(f"speaker_idx : {speaker_idx}")
-        
-        # enc_speaker = torch.row_stack([encoder_outputs[0][0][i] for i in speaker_idx])
-        # print(f"enc_speaker : {enc_speaker.shape}")
+                # no_padding_len = []
+                # for i in input_ids:
+                #     cnt = 0
+                #     for j in i[4:]:
+                #         if j != 3:
+                #             cnt += 1
+                #     no_padding_len.append(cnt)
+                # print(f"[encoder_outputs[0][0][i] for i in speaker_idx] : {}")
 
-        # Utterance의 Encoder Representation -> Mean Pooling
-        # enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
-        
-        # print("=======================================================================")
-        # print(f"enc_utterance.shape : {len(enc_uttesrance), enc_utterance[0].shape}")
-        # print(f"enc_utterance : {enc_utterance}")
-        
-        # mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
-        # print(f"mean : {mean_utterance.shape}")
-        
-        # raw = [for i in raw_data]
-        
-        # print(f"self.num_try : {self.num_try}")
-        model_name = "gogamza/kobart-base-v2"
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        speaker_tokens = ["P01:", "P02:", "P03:", "P04:", "P05:", "P06:", "P07:", "P08:", "P09:"]
-        tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", ":"]})
+                # Speaker Token의 Encoder Representation
+                
+                # print(f"speaker_input_ids : {speaker_input_ids}")
+                # print(f"speaker_idx : {speaker_idx}")
+                
+                # speaker token들의 Encoder Representation
+                enc_speaker = torch.row_stack([encoder_outputs[0][0][i] for i in speaker_idx])
+                # print(f"enc_speaker : {enc_speaker.shape}")
 
-        # decoded_ids = tokenizer.decode(input_ids[0])
-        # print(f"raw_data : {decoded_ids}")
-        # print(f"enc_speaker : {enc_speaker.shape}")
-        # ctr_speaker_loss = self.speaker_aware(
-        #                     enc_speaker=enc_speaker, # speaker의 representation list
-        #                     ctr_margin=1, # ctrastive learning 시, margin 값
-        #                     speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
-        #                     bench_speaker=0, # P01을 기준점 = 0번째 Speaker
-        #                     sampling=1 # 0 : Random 1 Sampling, 1 : Max 1 Sampling
-        #                    )
+                # Utterance의 Encoder Representation -> Mean Pooling
+                # enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
+                
+                # print("=======================================================================")
+                # print(f"enc_utterance.shape : {len(enc_uttesrance), enc_utterance[0].shape}")
+                # print(f"enc_utterance : {enc_utterance}")
+                
+                # mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
+                # print(f"mean : {mean_utterance.shape}")
+                
+                # raw = [for i in raw_data]
+                
+                # print(f"self.num_try : {self.num_try}")
+                model_name = "gogamza/kobart-base-v2"
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+                # speaker_tokens = ["P01:", "P02:", "P03:", "P04:", "P05:", "P06:", "P07:", "P08:", "P09:"]
+                tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", ":"]})
+
+                # decoded_ids = tokenizer.decode(input_ids[0])
+                # print(f"raw_data : {decoded_ids}")
+                # print(f"enc_speaker : {enc_speaker.shape}")
+
+                ############# 스피커 어웨어 부분 #################
+                ctr_speaker_loss = self.speaker_aware(
+                                    enc_speaker=enc_speaker, # speaker의 representation list
+                                    ctr_margin=1, # ctrastive learning 시, margin 값
+                                    speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
+                                    bench_speaker=0 # P01을 기준점 = 0번째 Speaker
+                                )
+                # ctr_speaker_loss = torch.zeros(1, device=device)
+        # elif ctr_mode == 2: # koBART + Topic-view
+
+        # elif ctr_mode == 3: # koBART + Spaeker-view + Topic-view
+
         
-        ctr_speaker_loss = torch.zeros(1, device=device)
 
         # for i in no_padding_len[1:]:
         #     enc = torch.cat([enc_utterance[0:i], enc_utterance[i+1:i+1]])
@@ -473,19 +480,7 @@ class BartModel(BartPretrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-            # ctr_speaker_loss=ctr_speaker_loss,
-        )
-
-        # return CustomSeq2SeqModelOutput(
+        # return Seq2SeqModelOutput(
         #     last_hidden_state=decoder_outputs.last_hidden_state,
         #     past_key_values=decoder_outputs.past_key_values,
         #     decoder_hidden_states=decoder_outputs.hidden_states,
@@ -496,6 +491,18 @@ class BartModel(BartPretrainedModel):
         #     encoder_attentions=encoder_outputs.attentions,
         #     # ctr_speaker_loss=ctr_speaker_loss,
         # )
+
+        return CustomSeq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            ctr_speaker_loss=ctr_speaker_loss,
+        )
 
 class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
@@ -563,7 +570,8 @@ class BartForConditionalGeneration(BartPretrainedModel):
         output_hidden_states: Optional[bool] = None,
         all_special_ids: Optional[List] = None,
         return_dict: Optional[bool] = None,
-        raw_data: Optional[datasets.dataset_dict.DatasetDict] = None
+        raw_data: Optional[datasets.dataset_dict.DatasetDict] = None,
+        ctr_mode: int = 0,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -601,7 +609,8 @@ class BartForConditionalGeneration(BartPretrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             all_special_ids=all_special_ids,
-            raw_data=raw_data
+            raw_data=raw_data,
+            ctr_mode=ctr_mode
         )
 
         # print(f"outputs[0] : {len(outputs[0])}")
@@ -617,20 +626,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return Seq2SeqLMOutput(
-            loss=masked_lm_loss,
-            # ctr_loss=outputs.ctr_speaker_loss,
-            logits=lm_logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-        # return CustomSeq2SeqLMOutput(
+        # return Seq2SeqLMOutput(
         #     loss=masked_lm_loss,
         #     # ctr_loss=outputs.ctr_speaker_loss,
         #     logits=lm_logits,
@@ -642,6 +638,19 @@ class BartForConditionalGeneration(BartPretrainedModel):
         #     encoder_hidden_states=outputs.encoder_hidden_states,
         #     encoder_attentions=outputs.encoder_attentions,
         # )
+
+        return CustomSeq2SeqLMOutput(
+            loss=masked_lm_loss,
+            ctr_loss=outputs.ctr_speaker_loss,
+            logits=lm_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
 
     def prepare_inputs_for_generation(
         self,

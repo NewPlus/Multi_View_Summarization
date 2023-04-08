@@ -10,12 +10,14 @@ from data_preprocess import DataPreProcess
 import numpy as np
 import re
 import random
+from evaluate import evaluator
 
-import os
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-torch.cuda_set_device(1)
-print(f"cuda : {torch.cuda.current_device()}")
+# import os
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# device = torch.device('cuda:1')
+# torch.cuda.set_device(device)
+# print(f"cuda : {torch.cuda.current_device()}")
 
 model_name = "gogamza/kobart-base-v2"
 # model_name = "/root/bart_customize/test_save/checkpoint-8000"
@@ -85,16 +87,15 @@ print(f"tokenized_data : {tokenized_data}")
 data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model)
 rouge = evaluate.load("rouge")
 
-from evaluate import evaluator
-task_evaluator = evaluator("summarization")
-results = task_evaluator.compute(
-    model_or_pipeline=model_name,
-    data=tokenized_data,
-    input_column="path",
-    label_column="sentence",
-    tokenizer=tokenizer,
-    metric="rouge",
-)
+# task_evaluator = evaluator("summarization")
+# results = task_evaluator.compute(
+#     model_or_pipeline=model_name,
+#     data=tokenized_data['valid'],
+#     input_column="dialogue",
+#     label_column="summary",
+#     tokenizer=tokenizer,
+#     metric="rouge",
+# )
 
 def compute_metrics(eval_pred):
     predictions, labels = eval_pred
@@ -120,7 +121,7 @@ training_args = Seq2SeqTrainingArguments(
     gradient_accumulation_steps= 1,
     learning_rate= 2e-5,
     max_steps=10000,
-    eval_steps=1000,
+    eval_steps=10,
     save_steps=1000,
     weight_decay= 0.1,
     label_smoothing_factor=0.1,
@@ -141,8 +142,12 @@ class BartTrainer(Seq2SeqTrainer):
             labels = inputs.pop("labels")
         else:
             labels = None
-        # print(f"!!!?")
-        outputs = model(**inputs, all_special_ids=self.all_special_ids, raw_data=self.raw_data)
+        print(f"!!!?")
+        outputs = model(**inputs, 
+                        all_special_ids=self.all_special_ids, 
+                        raw_data=self.raw_data,
+                        ctr_mode=1
+                        )
 
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
@@ -175,8 +180,8 @@ trainer = BartTrainer(
     eval_dataset=tokenized_data['valid'],
     tokenizer=tokenizer,
     data_collator=data_collator,
-    compute_metrics=results,
-    # compute_metrics=compute_metrics,
+    # compute_metrics=results,
+    compute_metrics=compute_metrics,
     all_special_ids=train[1],
     raw_data=tokenized_data['train']
 )
