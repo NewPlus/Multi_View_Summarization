@@ -110,7 +110,7 @@ class BartModel(BartPretrainedModel):
         return self.decoder
 
     def speaker_aware(self, enc_speaker, ctr_margin, speaker_input_ids, bench_speaker):
-        print(f"speaker!!")
+        # print(f"speaker!!")
         # print(f"============================================")
         # print(f"turn_num = enc_speaker.shape : {enc_speaker.shape[0]}")
         # print(f"enc_speaker : {enc_speaker}")

@@ -121,7 +121,7 @@ training_args = Seq2SeqTrainingArguments(
     gradient_accumulation_steps= 1,
     learning_rate= 2e-5,
     max_steps=10000,
-    eval_steps=10,
+    eval_steps=1000,
     save_steps=1000,
     weight_decay= 0.1,
     label_smoothing_factor=0.1,
@@ -142,7 +142,6 @@ class BartTrainer(Seq2SeqTrainer):
             labels = inputs.pop("labels")
         else:
             labels = None
-        print(f"!!!?")
         outputs = model(**inputs, 
                         all_special_ids=self.all_special_ids, 
                         raw_data=self.raw_data,
