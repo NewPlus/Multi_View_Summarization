@@ -14,7 +14,9 @@
 - Seq2SeqModelOutput, Seq2SeqLMOutput 상속 받아서 CustomSeq2SeqModelOutput, CustomSeq2SeqLMOutput DataClass 추가(2023.04.06)
 - BartModel, BartForConditionalGeneration에 special token의 index 전달(2023.04.06)
 - BartTrainer를 Customize(Preprocessing, Filtering 등등) (2023.04.06)
-- 기존 Bart로 Fine-tuning 후, 실험 진행(1차) (2023.04.06)
+- 기존 Bart로 Fine-tuning 후, 실험 진행(1차) (2023.04.07)
+- bart_trainer 오류 수정 (2023.04.08)
+- Speaker-Aware 잘못 이해한 부분 수정 (2023.04.08)
 
 ### Data_PreProcessing
 - SAMSum Dataset으로 Test준비(2023.03.31)
