@@ -17,6 +17,9 @@
 - 기존 Bart로 Fine-tuning 후, 실험 진행(1차) (2023.04.07)
 - bart_trainer 오류 수정 (2023.04.08)
 - Speaker-Aware 잘못 이해한 부분 수정 (2023.04.08)
+- Speaker-Aware 1차 실험 (2023.04.09) : koBART보다 ROUGE1 기준 0.92 상승
+- Topic-Aware 실험 코드 (2023.04.09)
+- Topic-Aware 1차 실험 (2023.04.09) : koBART보다 ROUGE1 기준 0.8 상승
 
 ### Data_PreProcessing
 - SAMSum Dataset으로 Test준비(2023.03.31)

@@ -145,9 +145,9 @@ class BartTrainer(Seq2SeqTrainer):
         outputs = model(**inputs, 
                         all_special_ids=self.all_special_ids, 
                         raw_data=self.raw_data,
-                        ctr_mode=1
+                        ctr_mode=2
                         )
-
+        
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
