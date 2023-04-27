@@ -1,25 +1,37 @@
 from transformers import BartTokenizerFast
 from datasets import load_dataset
+from dataclasses import dataclass, field
+from typing import Optional
 from transformers import DataCollatorForSeq2Seq
 import evaluate
 import numpy as np
-from transformers import Seq2SeqTrainingArguments, Seq2SeqTrainer
+from transformers import Seq2SeqTrainingArguments, Seq2SeqTrainer, HfArgumentParser
 from bartmodel import BartForConditionalGeneration
 import numpy as np
 import re
+import wandb
 
-ctr_mode = 3
-lamda = 0.07
-model_name = "facebook/bart-large"
+@dataclass
+class RunArguments:
+    model_name: str = field(default="facebook/bart-large")
+    data_name: str = field(default="samsum")
+    ctr_mode: int = field(default=3)
+    lamda: Optional[float] = field(default=0.08)
+    batch_size: int = field(default=8)
+    gpu_use: str = field(default="0")
+    set_seed: int = field(default=100)
+    cluster_mode: int = field(default=1)
 
-# dataset is SAMSum
-datasets = load_dataset("samsum")
+parser = HfArgumentParser((Seq2SeqTrainingArguments, RunArguments))
+training_args, run_args = parser.parse_args_into_dataclasses()
 
-tokenizer = BartTokenizerFast.from_pretrained(model_name)
-model = BartForConditionalGeneration.from_pretrained(model_name)
-
-print(f"before tokenizer.vocab_size : {tokenizer.vocab_size}")
-num_add_token = tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", ":"]})
+ctr_mode = run_args.ctr_mode
+lamda = run_args.lamda
+model_name = run_args.model_name # "facebook/bart-large"
+batch_size = run_args.batch_size
+gpu_use = run_args.gpu_use
+set_seed = run_args.set_seed
+cluster_mode = run_args.cluster_mode
 
 # Define the preprocessing function
 def preprocess_function(examples):
@@ -28,15 +40,6 @@ def preprocess_function(examples):
     labels = tokenizer(text_target=examples["summary"], max_length=128, truncation=True)
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
-
-# Preprocessing data
-tokenized_data = datasets.map(preprocess_function, batched=True)
-
-print(f"tokenized_data : {tokenized_data}")
-# Resize model's token embedding numbers because of special tokens
-model.resize_token_embeddings(tokenizer.vocab_size + num_add_token)
-data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model)
-rouge = evaluate.load("rouge")
 
 def compute_metrics(eval_pred):
     # metric with ROUGE Scores
@@ -61,26 +64,6 @@ def compute_metrics(eval_pred):
 
     return {k: round(v, 4) for k, v in result.items()}
 
-# Arguments for Trainer
-training_args = Seq2SeqTrainingArguments(
-    output_dir="test_save",
-    per_device_train_batch_size= 8,
-    per_device_eval_batch_size= 8,
-    save_total_limit=3,
-    evaluation_strategy="steps",
-    gradient_accumulation_steps= 1,
-    gradient_checkpointing=True,
-    learning_rate= 2e-5,
-    max_steps=10000,
-    eval_steps=1000,
-    save_steps=1000,
-    weight_decay= 0.1,
-    label_smoothing_factor=0.1,
-    predict_with_generate=True,
-    fp16=True,
-    seed=1
-)
-
 # Custom BartTrainer
 class BartTrainer(Seq2SeqTrainer):
     def __init__(self, all_special_ids, raw_data, *args, **kwargs):
@@ -97,7 +80,8 @@ class BartTrainer(Seq2SeqTrainer):
         outputs = model(**inputs, 
                         all_special_ids=self.all_special_ids, 
                         raw_data=self.raw_data,
-                        ctr_mode=ctr_mode
+                        ctr_mode=ctr_mode,
+                        cluster_mode=cluster_mode
                         )
         
         # Save past state if it exists
@@ -119,6 +103,51 @@ class BartTrainer(Seq2SeqTrainer):
         # final_loss : generation loss + contrastive loss
         final_loss = loss + lamda * outputs.ctr_loss
         return (final_loss, outputs) if return_outputs else final_loss
+
+# We use wandb logger: https://wandb.ai/site.
+if training_args.local_rank == 0:  # only on main process
+    # Initialize wandb run
+    wandb.login()
+    wandb.init(project="Multi-View_Dialogue_Summary", name=training_args.run_name)
+
+# dataset is SAMSum
+datasets = load_dataset(run_args.data_name) # "samsum")
+
+tokenizer = BartTokenizerFast.from_pretrained(model_name)
+model = BartForConditionalGeneration.from_pretrained(model_name)
+
+print(f"before tokenizer.vocab_size : {tokenizer.vocab_size}")
+num_add_token = tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", ":"]})
+
+# Preprocessing data
+tokenized_data = datasets.map(preprocess_function, batched=True)
+
+print(f"tokenized_data : {tokenized_data}")
+# Resize model's token embedding numbers because of special tokens
+model.resize_token_embeddings(tokenizer.vocab_size + num_add_token)
+data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model)
+rouge = evaluate.load("rouge")
+
+
+# Arguments for Trainer
+training_args = Seq2SeqTrainingArguments(
+    output_dir="test_save",
+    per_device_train_batch_size=batch_size,
+    per_device_eval_batch_size=batch_size,
+    save_total_limit=3,
+    evaluation_strategy="steps",
+    gradient_accumulation_steps= 1,
+    gradient_checkpointing=True,
+    learning_rate= 2e-5,
+    max_steps=10000,
+    eval_steps=1000,
+    save_steps=1000,
+    weight_decay= 0.1,
+    label_smoothing_factor=0.1,
+    predict_with_generate=True,
+    fp16=True,
+    seed=1
+)
 
 # Check the current device
 print(f"training_args.device : {training_args.device}")

@@ -11,3 +11,4 @@ nltk
 rouge_score
 absl-py
 tqdm
+wandb

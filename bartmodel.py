@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 import datasets
 
+from bart_trainer import set_seed, gpu_use, model_name
+
 from transformers.utils import (
     logging
 )
@@ -44,15 +46,13 @@ from transformers.models.bart.modeling_bart import (
 import os
 # for Using an One GPU!!
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = gpu_use
 device = torch.device("cuda")
 print(f"device : {device}")
 logger = logging.get_logger(__name__)
 
-model_name = "facebook/bart-large"
-
 # 고정할 시드 값 설정
-seed = 100
+seed = set_seed
 random.seed(seed)
 
 # PyTorch 시드 고정
@@ -267,6 +267,7 @@ class BartModel(BartPretrainedModel):
         all_special_ids: Optional[List] = None,
         raw_data: Optional[datasets.dataset_dict.DatasetDict] = None,
         ctr_mode: int = 0,
+        cluster_mode: int = 0,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
@@ -354,7 +355,7 @@ class BartModel(BartPretrainedModel):
                 ############# Topic-Aware #################
                 ctr_topic_loss = self.topic_aware(enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
                                 ctr_margin=1, # ctrastive learning 시, margin 값
-                                cluster_mode=0, # 0=Kmeans, 1=Sequential
+                                cluster_mode=cluster_mode, # 0=Kmeans, 1=Sequential
                                 )
                 ctr_speaker_loss = torch.zeros(1, device=device)
             else:
@@ -383,7 +384,7 @@ class BartModel(BartPretrainedModel):
                 ctr_topic_loss = self.topic_aware(
                                     enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
                                     ctr_margin=1, # ctrastive learning 시, margin 값
-                                    cluster_mode=1, # 0=Kmeans, 1=Sequential
+                                    cluster_mode=cluster_mode, # 0=Kmeans, 1=Sequential
                                 )
             else:
                 ctr_speaker_loss = torch.zeros(1, device=device)
@@ -488,6 +489,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
         return_dict: Optional[bool] = None,
         raw_data: Optional[datasets.dataset_dict.DatasetDict] = None,
         ctr_mode: int = 0,
+        cluster_mode: int = 0,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -526,7 +528,8 @@ class BartForConditionalGeneration(BartPretrainedModel):
             return_dict=return_dict,
             all_special_ids=all_special_ids,
             raw_data=raw_data,
-            ctr_mode=ctr_mode
+            ctr_mode=ctr_mode,
+            cluster_mode=cluster_mode,
         )
 
         # print(f"outputs[0] : {len(outputs[0])}")
