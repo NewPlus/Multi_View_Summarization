@@ -7,8 +7,6 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.decomposition import PCA
 
 import numpy as np
-from numpy import dot
-from numpy.linalg import norm
 
 import random
 import pandas as pd
@@ -16,7 +14,6 @@ import matplotlib.pyplot as plt
 
 from dataclasses import dataclass
 from transformers.utils import (
-    ModelOutput,
     logging
 )
 from transformers.utils import (
@@ -52,6 +49,8 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 logger = logging.get_logger(__name__)
 device = torch.device("cuda")
+
+model_name = "gogamza/kobart-base-v2"
 
 # 고정할 시드 값 설정
 seed = 42
@@ -121,76 +120,41 @@ class BartModel(BartPretrainedModel):
         return self.decoder
 
     def speaker_aware(self, enc_speaker, ctr_margin, speaker_input_ids, bench_speaker):
-        # print(f"speaker!!")
-        # print(f"============================================")
-        # print(f"turn_num = enc_speaker.shape : {enc_speaker.shape[0]}")
-        # print(f"enc_speaker : {enc_speaker}")
-
         enc_negative, enc_positive = [], []
 
         num_turn = enc_speaker.shape[0]
-        # cos = nn.CosineSimilarity(dim=0, eps=1e-8)
-        # sim = torch.dist(enc_speaker[i], enc_speaker[bench_speaker], p=2.0)
-
+        
         for i in range(1, num_turn):
-            # print(f"{speaker_input_ids[i], speaker_input_ids[bench_speaker]}=============================")
             if speaker_input_ids[i] == speaker_input_ids[bench_speaker]:
-                # print("same")
+                # same
                 enc_positive.append(enc_speaker[i])
             else:
-                # print("diff")
+                # diff
                 enc_negative.append(enc_speaker[i])
 
-        # print(f"positive_sim_idx : {positive_sim_idx}")
-        # print(f"negative_sim_idx : {negative_sim_idx}")
-
         if len(enc_positive) > 0 and len(enc_negative) > 0:
-            # print(f"enc_positive : {enc_positive}")
-            # print(f"enc_negative : {enc_negative}")
             positive_sample = random.choice(enc_positive)
             negative_sample = random.choice(enc_negative)
             positive_l2 = torch.dist(positive_sample, enc_speaker[bench_speaker], p=2.0)
             negative_l2 = torch.dist(negative_sample, enc_speaker[bench_speaker], p=2.0)
-            # positive_sim = cos(positive_sample, enc_speaker[bench_speaker])
-            # negative_sim = cos(negative_sample, enc_speaker[bench_speaker])
         else:
-            # print(f"1, {device}")
             ctr_speaker_loss = torch.zeros(1, device=device)
-            # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
             return ctr_speaker_loss
 
-        # print(f"=positive_sim={type(positive_sim)}")
-        # print(f"=negative_sim={type(negative_sim)}")
         softmax_sim = torch.Tensor([1-positive_l2, 1-negative_l2])
-        # softmax_sim = torch.Tensor([positive_sim - positive_l2, negative_sim - negative_l2])
-        # print(f"softmax_sim : {softmax_sim}")
         softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
-        # print(f"softmax_sim_out : {softmax_sim_out}")
 
         relu = nn.ReLU()
         positive_softmax = softmax_sim_out[0]
         negative_softmax = softmax_sim_out[1]
-        # print(f"positive_softmax : {positive_softmax}")
-        # print(f"negative_softmax : {negative_softmax}")
 
         ctr_speaker_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
-        # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
         return ctr_speaker_loss
     
-    def topic_aware(self, enc_utterance, ctr_margin, cluster_mode, raw_data):
+    def topic_aware(self, enc_utterance, ctr_margin, cluster_mode):
         df = pd.DataFrame()
-        # for i in range(enc_utterance.shape[0]):
-
-        # for rep in enc_utterance:
-        #     print(f"rep : {rep.shape}")
-        
-        # enc_utterance = torch.stack([enc_utterance[0][i][:j] for i, j in zip(range(enc_utterance.shape[1]), no_padding_len)])
-        # enc_utterance = [enc_utterance[0][i][:j] for i, j in zip(range(enc_utterance.shape[1]), no_padding_len)]
-        # print(f"enc_utterance aa : {len(enc_utterance)}")
         num_turn = len(enc_utterance)
-        # raw_data.split("<sep>")
         enc_rep = [rep.cpu().detach().numpy() for rep in enc_utterance]
-        # print(f"enc_rep : {enc_rep}")
 
         if num_turn < 3:
             return torch.zeros(1, device=device)
@@ -198,177 +162,35 @@ class BartModel(BartPretrainedModel):
         if cluster_mode == 0:
             num_cluster = 2
             kmeans = KMeans(n_clusters=num_cluster, init='k-means++').fit(enc_utterance.cpu().detach().numpy())
-            # print('[K-평균 군집 분석 결과]')
-            # print('###########################################')
-            # print(kmeans.labels_)
             df = pd.DataFrame({'enc_rep' : enc_rep, 'cluster' : kmeans.labels_})
-            # df['cluster'] = kmeans.labels_
-            # print(f"{df.head()}")
-
-            # centroid : K-Means가 구한 각 Cluster들의 Topic
-            # centroid = kmeans.cluster_centers_
-            # print(f"kmeans.cluster_centers_ : {centroid}")
 
             bench_cluster = df["cluster"][0]
             bench_turn = enc_utterance[0]
-            # print(f"bench_cluster : {bench_cluster}")
-            # print(f"bench_turn : {bench_turn.shape}")
-
+            
             positive_idx = df[df["cluster"] == bench_cluster][1:].index.to_numpy()
             negative_idx = df[df["cluster"] != bench_cluster].index.to_numpy()
-
-            # print(f"positive_idx : {len(positive_idx)}, negative_idx : {len(negative_idx)}")
             
             if len(positive_idx) < 1 or len(negative_idx) < 1:
-                # print("============================")
                 return torch.zeros(1, device=device)
-            
-            # print(f"enc_utterance[negative_idx] : {enc_utterance[negative_idx].shape}")
-            # check = enc_utterance == negative_idx
-            # print(f"check : {check}")
 
             positive = enc_utterance[positive_idx]
             negative = enc_utterance[negative_idx]
             positive_l2 = torch.Tensor([torch.dist(i, bench_turn, p=2.0) for i in positive])
             negative_l2 = torch.Tensor([torch.dist(i, bench_turn, p=2.0) for i in negative])
 
-            # print(f"positive_l2 : {positive_l2}")
-            # print(f"negative_l2 : {negative_l2}")
-
             positive_sample = torch.max(positive_l2)
             negative_sample = torch.min(negative_l2)
 
-            # print(f"positive_sample : {positive_sample}")
-            # print(f"negative_sample : {negative_sample}")
-
             softmax_sim = torch.Tensor([1-positive_sample, 1-negative_sample])
-            # softmax_sim = torch.Tensor([positive_sim - positive_l2, negative_sim - negative_l2])
-            # print(f"softmax_sim : {softmax_sim}")
             softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
             
 
             relu = nn.ReLU()
             positive_softmax = softmax_sim_out[0]
             negative_softmax = softmax_sim_out[1]
-            # print(f"positive_softmax : {positive_softmax}")
-            # print(f"negative_softmax : {negative_softmax}")
             
             ctr_topic_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
-            # print(f"ctr_topic_loss : {ctr_topic_loss}")
             return ctr_topic_loss
-
-            # print(f'PCA로 차원 축소 후 KMeans 결과 시각화')
-            # pca = PCA(n_components = 2)
-            # pca_transformed = pca.fit_transform(enc_utterance.detach().numpy())
-            # print(f"pca_transformed : {len(pca_transformed)}")
-
-            # print(f"enc_utterance : {enc_utterance.shape}")
-            # df['raw_data'] = raw_data
-            # df['cluster'] = kmeans.labels_
-            # df['pca_x'] = pca_transformed[:, 0]  #x좌표
-            # df['pca_y'] = pca_transformed[:, 1]  #y좌표
-            # # print(df)
-            # pca_centroid = pca.fit_transform(kmeans.cluster_centers_)
-            # # centroid : K-Means가 구한 각 Cluster들의 Topic
-            # centroid = kmeans.cluster_centers_
-            # print(f"kmeans.cluster_centers_ : {centroid}")
-
-            # # 클러스터별 인덱스 추출
-            # marker = []
-            # for i in range(num_cluster):
-            #     marker.append(df[df['cluster'] == i].index)
-
-            #scatter plot
-            # for i, markers in zip(range(num_cluster), ['o', 's', '^', "v", "D"]):
-            #     plt.scatter(x = df.loc[marker[i], 'pca_x'], y = df.loc[marker[i], 'pca_y'], marker = markers)
-
-            # for i in range(num_cluster):
-            #     plt.scatter(x = pca_centroid[i][0], y = pca_centroid[i][1], marker="*")
-            
-            # plt.xlabel('PCA1')
-            # plt.ylabel('PCA2')
-            # plt.title(f'{num_cluster} Kmeans Clusters Visualization by 2 PCA Components')
-            # plt.legend(['cluster'+str(i) for i in range(num_cluster)])
-            # for i, x, y in zip(range(len(pca_transformed)), df['pca_x'], df['pca_y']):
-            #     plt.annotate(i, (x, y), textcoords="offset points", xytext=(0, 10), ha="center")
-
-            # plt.show()
-            # plt.savefig('kmeans_result'+str(self.num_try)+'.png')
-            # plt.clf()
-            # self.num_try += 1
-
-        elif cluster_mode == 1:
-            # epsilon, 최소 샘플 개수 설정
-            dbscan = DBSCAN(eps=8, min_samples=5).fit(enc_utterance.detach().numpy())
-            print('[DBSCAN 군집 분석 결과]')
-            print('###########################################')
-            print(f"dbscan : {dbscan.labels_}")
-
-            print(f'PCA로 차원 축소 후 DBSCAN 결과 시각화')
-            pca = PCA(n_components = 2)
-            pca_transformed = pca.fit_transform(enc_utterance.detach().numpy())
-            print(f"pca_transformed : {len(pca_transformed)}")
-
-            df = pd.DataFrame()
-            df['cluster'] = dbscan.labels_
-            df['pca_x'] = pca_transformed[:, 0]  #x좌표
-            df['pca_y'] = pca_transformed[:, 1]  #y좌표
-            print(df)
-            # pca_centroid = pca.fit_transform(dbscan.core_sample_indices_)
-            # print(f"dbscan.core_sample_indices_ : {pca_centroid}")
-
-            # 클러스터별 인덱스 추출
-            marker = []
-            num_cluster = len(set(dbscan.labels_))
-            for i in range(num_cluster):
-                marker.append(df[df['cluster'] == i].index)
-
-            #scatter plot
-            for i, markers in zip(range(num_cluster), ['o', 's', '^', "v", "D"]):
-                plt.scatter(x = df.loc[marker[i], 'pca_x'], y = df.loc[marker[i], 'pca_y'], marker = markers)
-
-            # for i in range(len(dbscan.labels_)):
-            #     plt.scatter(x = pca_centroid[i][0], y = pca_centroid[i][1], marker="*")
-            
-            plt.xlabel('PCA1')
-            plt.ylabel('PCA2')
-            plt.title(f'{num_cluster} DBSCAN Clusters Visualization by 2 PCA Components')
-            plt.legend(['cluster'+str(i) for i in range(num_cluster)])
-            plt.show()
-            plt.savefig('dbscan_result'+str(self.num_try)+'.png')
-            plt.clf()
-            self.num_try += 1 
-
-        print(f"====================<df>=====================")
-        print(f"{df}")
-        # softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
-        # positive_softmax = softmax_sim_out[:positive_sim_idx].max()
-        # negative_softmax = softmax_sim_out[positive_sim_idx:positive_sim_idx+negative_sim_idx].max()
-        # relu = nn.ReLU()
-        # ctr_speaker_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
-
-        # num_topics = 5
-        # chunksize = 2000
-        # passes = 20
-        # iterations = 400
-        # eval_every = None
-
-        # temp = dictionary[0]
-        # id2word = dictionary.id2token
-
-        # model = LdaModel(
-        #     corpus=corpus,
-        #     id2word=id2word,
-        #     chunksize=chunksize,
-        #     alpha='auto',
-        #     eta='auto',
-        #     iterations=iterations,
-        #     num_topics=num_topics,
-        #     passes=passes,
-        #     eval_every=eval_every
-        # )
-
-        return
     
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -438,13 +260,7 @@ class BartModel(BartPretrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
         
-        # print("encoder_outputs[0].shape : ", encoder_outputs[0].shape)
-        # print(f"input_ids length : {input_ids.shape[1]}")
-        # print(f"input_ids : {input_ids[0]}")
-        # print(f"all_special_ids : {all_special_ids}")
-        model_name = "gogamza/kobart-base-v2"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        # speaker_tokens = ["P01:", "P02:", "P03:", "P04:", "P05:", "P06:", "P07:", "P08:", "P09:"]
         tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", ":"]})
 
         if all_special_ids is not None:
@@ -457,98 +273,57 @@ class BartModel(BartPretrainedModel):
         if ctr_mode == 0: # 기존 koBART만 Training
             ctr_speaker_loss = torch.zeros(1, device=device)
             ctr_topic_loss = torch.zeros(1, device=device)
-        elif ctr_mode == 1: # koBART + Spaeker-view
+        elif ctr_mode == 1: # koBART + Spaeker-aware
             if all_special_ids is not None:
-                # print(f"sep_idx : {sep_idx}")
-                # print(f"speaker_idx : {speaker_idx}")
-                # print(f"utterance_idx : {utterance_idx}")
-                # print(f"all_special_ids : {all_special_ids}")
-                
-                # speaker token들의 Encoder Representation
                 enc_speaker = torch.row_stack([encoder_outputs[0][0][i] for i in speaker_idx])
-                # print(f"enc_speaker : {enc_speaker.shape}")
 
-                # raw = [for i in raw_data]
-                
-                # print(f"self.num_try : {self.num_try}")
-
-                # decoded_ids = tokenizer.decode(input_ids[0])
-                # print(f"raw_data : {decoded_ids}")
-                # print(f"enc_speaker : {enc_speaker.shape}")
-
-                ############# 스피커 어웨어 부분 #################
+                ############# Spaeker-aware #################
                 ctr_speaker_loss = self.speaker_aware(
                                     enc_speaker=enc_speaker, # speaker의 representation list
-                                    ctr_margin=0.5, # ctrastive learning 시, margin 값
+                                    ctr_margin=1, # ctrastive learning 시, margin 값
                                     speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
                                     bench_speaker=0 # P01을 기준점 = 0번째 Speaker
                                 )
                 
                 ctr_topic_loss = torch.zeros(1, device=device)
-                # ctr_speaker_loss = torch.zeros(1, device=device)
         elif ctr_mode == 2: # koBART + Topic-view
 
             # speaker token들의 Encoder Representation
             enc_speaker = torch.row_stack([encoder_outputs[0][0][i] for i in speaker_idx])
-            # print(f"enc_speaker : {enc_speaker.shape}")
 
             # Utterance의 Encoder Representation -> Mean Pooling
             enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
                 
-            # print("=======================================================================")
-            # print(f"sep_idx : {sep_idx}")
-            # print(f"speaker_idx : {speaker_idx}")
-            # print(f"utterance_idx : {utterance_idx}")
-            # print(f"all_special_ids : {all_special_ids}")
-            # print(f"enc_utterance.shape : {len(enc_utterance), enc_utterance[0].shape}")
-            # print(f"enc_utterance : {enc_utterance}")
-                
             mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
-            # print(f"mean : {mean_utterance.shape}")
-            # ########################################################################################################
-            ctr_topic_loss = self.topic_aware(enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
+            
+            ############# Topic-aware #################
+            ctr_topic_loss = self.topic_aware(
+                             enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
                              ctr_margin=1, # ctrastive learning 시, margin 값
-                             cluster_mode=0, # 0=Kmeans, 1=DBSCAN
-                             raw_data=raw_data
+                             cluster_mode=0, # 0=Kmeans
                              )
             ctr_speaker_loss = torch.zeros(1, device=device)
-            # ########################################################################################################
-
 
         elif ctr_mode == 3: # koBART + Spaeker-view + Topic-view
             # Utterance의 Encoder Representation -> Mean Pooling
             enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
             mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
 
-            ############# 스피커 어웨어 부분 #################
+            ############# Spaeker-aware #################
             ctr_speaker_loss = self.speaker_aware(
                                     enc_speaker=enc_speaker, # speaker의 representation list
-                                    ctr_margin=0.5, # ctrastive learning 시, margin 값
+                                    ctr_margin=1, # ctrastive learning 시, margin 값
                                     speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
                                     bench_speaker=0 # P01을 기준점 = 0번째 Speaker
                             )
-                
-            ctr_topic_loss = self.topic_aware(enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
+            
+            ############# Topic-aware #################
+            ctr_topic_loss = self.topic_aware(
+                             enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
                              ctr_margin=1, # ctrastive learning 시, margin 값
                              cluster_mode=0, # 0=Kmeans, 1=DBSCAN
                              raw_data=raw_data
                              )
-            # ########################################################################################################
-
-        # for i in no_padding_len[1:]:
-        #     enc = torch.cat([enc_utterance[0:i], enc_utterance[i+1:i+1]])
-        #     print(f"enc.shape : {enc.shape}")
-        #     enc_utterance = torch.cat((enc_utterance, enc), dim=0)
-        #     print(f"enc_utterance : {enc_utterance.shape}")
-        # enc_utterance = torch.cat([enc_utterance[0:0], enc_utterance[size:]])
-        # print(f"enc_utterance.shape after : {enc_utterance.shape}")
-
-        # for rep_speak, idx, i in zip(enc_speaker, speaker_input_ids, range(len(enc_speaker))):
-        #     print(f"speaker_input_ids : {idx}")
-        #     # print(f"rep_speak : {rep_speak}")
-        #     self.speaker_aware(rep_speak, enc_speaker, idx, speaker_input_ids, i)
-        
-        # self.topic_aware(encoder_outputs[0])
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -568,18 +343,6 @@ class BartModel(BartPretrainedModel):
 
         if not return_dict:
             return decoder_outputs + encoder_outputs
-
-        # return Seq2SeqModelOutput(
-        #     last_hidden_state=decoder_outputs.last_hidden_state,
-        #     past_key_values=decoder_outputs.past_key_values,
-        #     decoder_hidden_states=decoder_outputs.hidden_states,
-        #     decoder_attentions=decoder_outputs.attentions,
-        #     cross_attentions=decoder_outputs.cross_attentions,
-        #     encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-        #     encoder_hidden_states=encoder_outputs.hidden_states,
-        #     encoder_attentions=encoder_outputs.attentions,
-        #     # ctr_speaker_loss=ctr_speaker_loss,
-        # )
 
         return CustomSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -703,7 +466,6 @@ class BartForConditionalGeneration(BartPretrainedModel):
             ctr_mode=ctr_mode
         )
 
-        # print(f"outputs[0] : {len(outputs[0])}")
         lm_logits = self.lm_head(outputs[0])
         lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
 
@@ -715,19 +477,6 @@ class BartForConditionalGeneration(BartPretrainedModel):
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
-        # return Seq2SeqLMOutput(
-        #     loss=masked_lm_loss,
-        #     # ctr_loss=outputs.ctr_speaker_loss,
-        #     logits=lm_logits,
-        #     past_key_values=outputs.past_key_values,
-        #     decoder_hidden_states=outputs.decoder_hidden_states,
-        #     decoder_attentions=outputs.decoder_attentions,
-        #     cross_attentions=outputs.cross_attentions,
-        #     encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-        #     encoder_hidden_states=outputs.encoder_hidden_states,
-        #     encoder_attentions=outputs.encoder_attentions,
-        # )
 
         return CustomSeq2SeqLMOutput(
             loss=masked_lm_loss,
