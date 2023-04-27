@@ -49,15 +49,12 @@ from transformers.models.bart.modeling_bart import (
 
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-device = torch.device("cuda")
-print(f"device : {device}")
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 logger = logging.get_logger(__name__)
-
-model_name = "facebook/bart-large"
+device = torch.device("cuda")
 
 # 고정할 시드 값 설정
-seed = 100
+seed = 42
 random.seed(seed)
 
 # PyTorch 시드 고정
@@ -65,7 +62,6 @@ torch.manual_seed(seed)
 
 # NumPy 시드 고정
 np.random.seed(seed)
-
 
 @dataclass
 class CustomSeq2SeqLMOutput(Seq2SeqLMOutput):
@@ -133,128 +129,53 @@ class BartModel(BartPretrainedModel):
         enc_negative, enc_positive = [], []
 
         num_turn = enc_speaker.shape[0]
-        cos = nn.CosineSimilarity(dim=0, eps=1e-8)
+        # cos = nn.CosineSimilarity(dim=0, eps=1e-8)
         # sim = torch.dist(enc_speaker[i], enc_speaker[bench_speaker], p=2.0)
-        num_speakers = len(speaker_input_ids)
-        num_speaker_unique = len(list(set([int(i[0]) for i in speaker_input_ids])))
 
-        # turns = range(1, num_turn)
-        # for i in turns:
-        #     if torch.eq(speaker_input_ids[i][0], speaker_input_ids[bench_speaker][0]):
-        #         # print("same")
-        #         enc_positive.append(enc_speaker[i])
-        #     else:
-        #         # print("diff")
-        #         enc_negative.append(enc_speaker[i])
-
-        # if len(enc_positive) > 0 and len(enc_negative) > 0:
-        #     positive_sample = random.choice(enc_positive)
-        #     negative_sample = random.choice(enc_negative)
-        #     positive_l2 = torch.dist(positive_sample, enc_speaker[bench_speaker], p=2.0)
-        #     negative_l2 = torch.dist(negative_sample, enc_speaker[bench_speaker], p=2.0)
-        # else:
-        #     ctr_speaker_loss = torch.zeros(1, device=device)
-        #     return ctr_speaker_loss
-        
-        # softmax_sim = torch.stack([1-positive_l2, 1-negative_l2])
-        # softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
-
-        # relu = nn.ReLU()
-        # positive_softmax = softmax_sim_out[0]
-        # negative_softmax = softmax_sim_out[1]
-
-        # ctr_speaker_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
-
-        ctr_speaker_loss_means = []
-        for speaker in range(1, num_speaker_unique):
-            bench_speaker = speaker
-            turns = range(1, num_turn)
-            # print(f"turns : {turns}")
-            for i in turns:
-                # print(f"{torch.eq(speaker_input_ids[i][0], speaker_input_ids[bench_speaker][0])}=============================")
-                # print(f"speaker : {speaker_input_ids[i]}")
-                if torch.eq(speaker_input_ids[i][0], speaker_input_ids[bench_speaker][0]):
-                    # print("same")
-                    enc_positive.append(enc_speaker[i])
-                else:
-                    # print("diff")
-                    enc_negative.append(enc_speaker[i])
-
-            # print(f"positive_sim_idx : {positive_sim_idx}")
-            # print(f"negative_sim_idx : {negative_sim_idx}")
-
-            if len(enc_positive) > 0 and len(enc_negative) > 0:
-                # print(f"enc_positive : {enc_positive}")
-                # print(f"enc_negative : {enc_negative}")
-
-                relu = nn.ReLU()
-
-                positive_sample_l2 = torch.stack([torch.dist(positive, enc_speaker[bench_speaker], p=2.0) for positive in enc_positive])
-                # print(f"positive_sample_l2 : {positive_sample_l2}")
-                negative_sample_l2 = torch.stack([torch.dist(negative, enc_speaker[bench_speaker], p=2.0) for negative in enc_negative])
-                # print(f"positive_sample_l2 : {negative_sample_l2}")
-
-                ctr_speaker_loss_lists = []
-                for negative_sample in negative_sample_l2:
-                    for positive_sample in positive_sample_l2:
-                        softmax_sim_out = nn.functional.softmax(torch.stack([1-positive_sample, 1-negative_sample]), dim=0)
-                        positive_softmax = softmax_sim_out[0]
-                        negative_softmax = softmax_sim_out[1]
-                        ctr_speaker_loss_lists.append(relu(ctr_margin - (positive_softmax - negative_softmax)))
-                ctr_speaker_loss_list = torch.stack(ctr_speaker_loss_lists)
-                # print(f"ctr_speaker_loss_list : {ctr_speaker_loss_list}")
-                ctr_speaker_loss = torch.mean(ctr_speaker_loss_list)
-                # print(f"ctr_speaker_loss : {ctr_speaker_loss.grad_fn}")
-                ctr_speaker_loss_means.append(ctr_speaker_loss)
+        for i in range(1, num_turn):
+            # print(f"{speaker_input_ids[i], speaker_input_ids[bench_speaker]}=============================")
+            if speaker_input_ids[i] == speaker_input_ids[bench_speaker]:
+                # print("same")
+                enc_positive.append(enc_speaker[i])
             else:
-                # print(f"1, {device}")
-                ctr_speaker_loss = torch.zeros(1, device=device)
-                # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
-                return ctr_speaker_loss
+                # print("diff")
+                enc_negative.append(enc_speaker[i])
 
-        if len(ctr_speaker_loss_means) == 0:
+        # print(f"positive_sim_idx : {positive_sim_idx}")
+        # print(f"negative_sim_idx : {negative_sim_idx}")
+
+        if len(enc_positive) > 0 and len(enc_negative) > 0:
+            # print(f"enc_positive : {enc_positive}")
+            # print(f"enc_negative : {enc_negative}")
+            positive_sample = random.choice(enc_positive)
+            negative_sample = random.choice(enc_negative)
+            positive_l2 = torch.dist(positive_sample, enc_speaker[bench_speaker], p=2.0)
+            negative_l2 = torch.dist(negative_sample, enc_speaker[bench_speaker], p=2.0)
+            # positive_sim = cos(positive_sample, enc_speaker[bench_speaker])
+            # negative_sim = cos(negative_sample, enc_speaker[bench_speaker])
+        else:
+            # print(f"1, {device}")
             ctr_speaker_loss = torch.zeros(1, device=device)
             # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
             return ctr_speaker_loss
-        else:
-            ctr_speaker_loss_result = torch.stack(ctr_speaker_loss_means)
-            # print(f"------------ctr_speaker_loss_means : {torch.stack(ctr_speaker_loss_means)}--------------")
-            # print(f"============ctr_speaker_loss_result : {ctr_speaker_loss_result}==============")
-            return ctr_speaker_loss_result
 
-            # print(f"=positive_sim={type(positive_sim)}")
-            # print(f"=negative_sim={type(negative_sim)}")
-            # softmax_sim = torch.Tensor([positive_l2, negative_l2])
+        # print(f"=positive_sim={type(positive_sim)}")
+        # print(f"=negative_sim={type(negative_sim)}")
+        softmax_sim = torch.Tensor([1-positive_l2, 1-negative_l2])
+        # softmax_sim = torch.Tensor([positive_sim - positive_l2, negative_sim - negative_l2])
+        # print(f"softmax_sim : {softmax_sim}")
+        softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
+        # print(f"softmax_sim_out : {softmax_sim_out}")
 
-            # softmax_sim = torch.stack([1-positive_l2, 1-negative_l2])
-            # softmax_sim = torch.stack([positive_sim, negative_sim])
-            # softmax_sim = torch.stack([positive_sim - positive_l2, negative_sim - negative_l2])
-            # print(f"softmax_sim : {softmax_sim}")
-            # softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
-            # print(f"softmax_sim_out : {softmax_sim_out}")
+        relu = nn.ReLU()
+        positive_softmax = softmax_sim_out[0]
+        negative_softmax = softmax_sim_out[1]
+        # print(f"positive_softmax : {positive_softmax}")
+        # print(f"negative_softmax : {negative_softmax}")
 
-            # relu = nn.ReLU()
-            # positive_softmax = softmax_sim_out[0]
-            # negative_softmax = softmax_sim_out[1]
-            # print(f"positive_softmax : {positive_softmax}")
-            # print(f"negative_softmax : {negative_softmax}")
-            # print(f"ctr_margin - (positive_softmax - negative_softmax) : {ctr_margin - (positive_softmax - negative_softmax)}")
-
-            # ctr_speaker_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
-            # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
-
-            
-            # # 고정할 시드 값 설정
-            # seed = 42
-            # random.seed(seed)
-
-            # # PyTorch 시드 고정
-            # torch.manual_seed(seed)
-
-            # # NumPy 시드 고정
-            # np.random.seed(seed)
-
-        # return ctr_speaker_loss
+        ctr_speaker_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
+        # print(f"ctr_speaker_loss : {ctr_speaker_loss}")
+        return ctr_speaker_loss
     
     def topic_aware(self, enc_utterance, ctr_margin, cluster_mode, raw_data):
         df = pd.DataFrame()
@@ -275,20 +196,6 @@ class BartModel(BartPretrainedModel):
             return torch.zeros(1, device=device)
 
         if cluster_mode == 0:
-            # sse = []
-            # for i in range(1, 11):
-            #     km = KMeans(n_clusters=i, init='k-means++', random_state=0)
-            #     km.fit(enc_utterance.cpu().detach().numpy())
-            #     sse.append(km.inertia_)
-
-            # plt.plot(range(1, 11), sse, marker='o')
-            # plt.xlabel('n_clusters')
-            # plt.xlabel('SSE')
-            # plt.show()
-            # plt.savefig('kmeans_n_clusters.png')
-            # plt.clf()
-
-
             num_cluster = 2
             kmeans = KMeans(n_clusters=num_cluster, init='k-means++').fit(enc_utterance.cpu().detach().numpy())
             # print('[K-평균 군집 분석 결과]')
@@ -299,7 +206,7 @@ class BartModel(BartPretrainedModel):
             # print(f"{df.head()}")
 
             # centroid : K-Means가 구한 각 Cluster들의 Topic
-            centroid = torch.Tensor(kmeans.cluster_centers_).to(device)
+            # centroid = kmeans.cluster_centers_
             # print(f"kmeans.cluster_centers_ : {centroid}")
 
             bench_cluster = df["cluster"][0]
@@ -307,109 +214,48 @@ class BartModel(BartPretrainedModel):
             # print(f"bench_cluster : {bench_cluster}")
             # print(f"bench_turn : {bench_turn.shape}")
 
-            # positive_idx = df[df["cluster"] == bench_cluster][1:].index.to_numpy()
-            # negative_idx = df[df["cluster"] != bench_cluster].index.to_numpy()
+            positive_idx = df[df["cluster"] == bench_cluster][1:].index.to_numpy()
+            negative_idx = df[df["cluster"] != bench_cluster].index.to_numpy()
+
+            # print(f"positive_idx : {len(positive_idx)}, negative_idx : {len(negative_idx)}")
             
-            # if len(positive_idx) < 1 or len(negative_idx) < 1:
-            #     return torch.zeros(1, device=device)
-
-            # positive = enc_utterance[positive_idx]
-            # negative = enc_utterance[negative_idx]
-            # print(f"positive : {positive.shape}")
-            # print(f"negative : {negative.shape}")
-
-            # print(f"bench_cluster : {1 if bench_cluster == 1 else 0}")
-            # print(f"^bench_cluster : {0 if bench_cluster == 1 else 1}")
-
-            # negative_sample = min([torch.dist(n, centroid[1 if bench_cluster == 1 else 0], p=2.0) for n in negative])
-            # positive_sample = min([torch.dist(p, centroid[0 if bench_cluster == 1 else 1], p=2.0) for p in positive])
-            # negative_sample = max([cos(n, centroid[1 if bench_cluster == 1 else 0]) for n in negative])
-            # positive_sample = max([cos(p, centroid[0 if bench_cluster == 1 else 1]) for p in positive])
-
-            # #############
-            # negative_sample_l2 = max([torch.dist(n, centroid[1 if bench_cluster == 1 else 0], p=2.0) for n in negative])
-            # positive_sample_l2 = max([torch.dist(p, centroid[0 if bench_cluster == 1 else 1], p=2.0) for p in positive])
-
-            # cos = nn.CosineSimilarity(dim=0, eps=1e-8)
-            # negative_sample_sim = max([cos(n, centroid[1 if bench_cluster == 1 else 0]) for n in negative])
-            # positive_sample_sim = max([cos(p, centroid[0 if bench_cluster == 1 else 1]) for p in positive])
-
-            # softmax_sim = torch.stack([positive_sample_sim - positive_sample_l2, negative_sample_sim - negative_sample_l2])
-
-            # softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
-
-            # relu = nn.ReLU()
-            # positive_softmax = softmax_sim_out[0]
-            # negative_softmax = softmax_sim_out[1]
-            # # print(f"positive_softmax : {positive_softmax}")
-            # # print(f"negative_softmax : {negative_softmax}")
+            if len(positive_idx) < 1 or len(negative_idx) < 1:
+                # print("============================")
+                return torch.zeros(1, device=device)
             
-            # ctr_topic_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
-            # #################
+            # print(f"enc_utterance[negative_idx] : {enc_utterance[negative_idx].shape}")
+            # check = enc_utterance == negative_idx
+            # print(f"check : {check}")
 
-            relu = nn.ReLU()
-            ctr_topic_loss_means = []
-            for bench in range(num_cluster):
-                positive_idx = df[df["cluster"] == bench][1:].index.to_numpy()
-                negative_idx = df[df["cluster"] != bench].index.to_numpy()
-                
-                if len(positive_idx) < 1 or len(negative_idx) < 1:
-                    return torch.zeros(1, device=device)
+            positive = enc_utterance[positive_idx]
+            negative = enc_utterance[negative_idx]
+            positive_l2 = torch.Tensor([torch.dist(i, bench_turn, p=2.0) for i in positive])
+            negative_l2 = torch.Tensor([torch.dist(i, bench_turn, p=2.0) for i in negative])
 
-                positive = enc_utterance[positive_idx]
-                negative = enc_utterance[negative_idx]
+            # print(f"positive_l2 : {positive_l2}")
+            # print(f"negative_l2 : {negative_l2}")
 
-                negative_sample_l2 = [torch.dist(n, centroid[bench], p=2.0) for n in negative]
-                positive_sample_l2 = [torch.dist(p, centroid[bench], p=2.0) for p in positive]
-                
-                ctr_topic_loss_lists = []
-                for negative_sample in negative_sample_l2:
-                    for positive_sample in positive_sample_l2:
-                        softmax_sim_out = nn.functional.softmax(torch.stack([1-positive_sample, 1-negative_sample]), dim=0)
-                        positive_softmax = softmax_sim_out[0]
-                        negative_softmax = softmax_sim_out[1]
-                        ctr_topic_loss_lists.append(relu(ctr_margin - (positive_softmax - negative_softmax)))
-                ctr_topic_loss_list = torch.stack(ctr_topic_loss_lists)
-                ctr_topic_loss = torch.mean(ctr_topic_loss_list)
-                ctr_topic_loss_means.append(ctr_topic_loss)
-            
-            ctr_topic_loss_result = torch.stack(ctr_topic_loss_means)
-            # print(f"------------ctr_speaker_loss_means : {torch.stack(ctr_topic_loss_means)}--------------")
-            print(f"============ctr_topic_loss_result : {ctr_topic_loss_result}==============")
-            return ctr_topic_loss_result
-
-            # print(f"before positive_l2 : {positive_l2}")
-            # print(f"before negative_l2 : {negative_l2}")
-
-
-            # negative_l2 = torch.Tensor([torch.dist(n, centroid[1 if bench_cluster == 1 else 0], p=2.0) for n in negative])
-            # positive_l2 = torch.Tensor([torch.dist(p, centroid[0 if bench_cluster == 1 else 1], p=2.0) for p in positive])
-            
-            # print(f"after positive_l2 : {positive_l2}")
-            # print(f"after negative_l2 : {negative_l2}")
-
-            # positive_sample = random.choice(positive_l2)
-            # negative_sample = random.choice(negative_l2)
-            # positive_sample = torch.min(positive_l2)
-            # negative_sample = torch.min(negative_l2)
+            positive_sample = torch.max(positive_l2)
+            negative_sample = torch.min(negative_l2)
 
             # print(f"positive_sample : {positive_sample}")
             # print(f"negative_sample : {negative_sample}")
 
-            # softmax_sim = torch.stack([positive_sample, negative_sample])
+            softmax_sim = torch.Tensor([1-positive_sample, 1-negative_sample])
             # softmax_sim = torch.Tensor([positive_sim - positive_l2, negative_sim - negative_l2])
             # print(f"softmax_sim : {softmax_sim}")
+            softmax_sim_out = nn.functional.softmax(softmax_sim, dim=0)
             
 
-            # relu = nn.ReLU()
-            # positive_softmax = softmax_sim_out[0]
-            # negative_softmax = softmax_sim_out[1]
-            # # print(f"positive_softmax : {positive_softmax}")
-            # # print(f"negative_softmax : {negative_softmax}")
+            relu = nn.ReLU()
+            positive_softmax = softmax_sim_out[0]
+            negative_softmax = softmax_sim_out[1]
+            # print(f"positive_softmax : {positive_softmax}")
+            # print(f"negative_softmax : {negative_softmax}")
             
-            # ctr_topic_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
+            ctr_topic_loss = relu(ctr_margin - (positive_softmax - negative_softmax))
             # print(f"ctr_topic_loss : {ctr_topic_loss}")
-            # return ctr_topic_loss
+            return ctr_topic_loss
 
             # print(f'PCA로 차원 축소 후 KMeans 결과 시각화')
             # pca = PCA(n_components = 2)
@@ -450,41 +296,8 @@ class BartModel(BartPretrainedModel):
             # plt.savefig('kmeans_result'+str(self.num_try)+'.png')
             # plt.clf()
             # self.num_try += 1
+
         elif cluster_mode == 1:
-            turn_topics = [0 if i < num_turn//2 else 1 for i in range(num_turn)]
-            centroid = torch.stack([enc_utterance[num_turn//4], enc_utterance[num_turn//2 + num_turn//4]])
-            df = pd.DataFrame({'enc_rep' : enc_rep, 'cluster' : turn_topics})
-
-            relu = nn.ReLU()
-            ctr_topic_loss_means = []
-            for bench in range(num_turn):
-                positive_idx = df[df["cluster"] == bench][1:].index.to_numpy()
-                negative_idx = df[df["cluster"] != bench].index.to_numpy()
-                if len(positive_idx) >= 1 and len(negative_idx) >= 1:
-                    positive = enc_utterance[positive_idx]
-                    negative = enc_utterance[negative_idx]
-
-                    negative_sample_l2 = [torch.dist(n, centroid[bench], p=2.0) for n in negative]
-                    positive_sample_l2 = [torch.dist(p, centroid[bench], p=2.0) for p in positive]
-                    
-                    ctr_topic_loss_lists = []
-                    for negative_sample in negative_sample_l2:
-                        for positive_sample in positive_sample_l2:
-                            softmax_sim_out = nn.functional.softmax(torch.stack([1-positive_sample, 1-negative_sample]), dim=0)
-                            positive_softmax = softmax_sim_out[0]
-                            negative_softmax = softmax_sim_out[1]
-                            ctr_topic_loss_lists.append(relu(ctr_margin - (positive_softmax - negative_softmax)))
-                    ctr_topic_loss_list = torch.stack(ctr_topic_loss_lists)
-                    ctr_topic_loss = torch.mean(ctr_topic_loss_list)
-                    ctr_topic_loss_means.append(ctr_topic_loss)
-            
-            # print(f"ctr_topic_loss : {ctr_topic_loss_means}")
-            ctr_topic_loss_result = torch.stack(ctr_topic_loss_means)
-            # print(f"============ctr_topic_loss_result : {ctr_topic_loss_result}==============")
-            return ctr_topic_loss_result
-
-
-        elif cluster_mode == 2:
             # epsilon, 최소 샘플 개수 설정
             dbscan = DBSCAN(eps=8, min_samples=5).fit(enc_utterance.detach().numpy())
             print('[DBSCAN 군집 분석 결과]')
@@ -629,150 +442,98 @@ class BartModel(BartPretrainedModel):
         # print(f"input_ids length : {input_ids.shape[1]}")
         # print(f"input_ids : {input_ids[0]}")
         # print(f"all_special_ids : {all_special_ids}")
-
+        model_name = "gogamza/kobart-base-v2"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         # speaker_tokens = ["P01:", "P02:", "P03:", "P04:", "P05:", "P06:", "P07:", "P08:", "P09:"]
-        tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", ":"]})
-
+        tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", ":"]})
 
         if all_special_ids is not None:
-            # lang_sep = 4 # 한국어
-            lang_sep = 5 # English
-            sep_idx = [idx for ids, idx in zip(input_ids[0], range(input_ids.shape[1])) if ids == all_special_ids[lang_sep]]
-            speaker_idx = []
-            for idx in sep_idx:
-                ids = idx
-                while ids < len(input_ids[0]) and input_ids[0][ids] != all_special_ids[lang_sep+1]:
-                    ids += 1
-                speaker_idx.append([idx+1, ids])
-            # print(f"speaker_idx : {speaker_idx}")
-            # sep_idx.append(input_ids.shape[1])
-            # speaker_idx = [element+1 for element in sep_idx[:-1]]
-            
-            # print(f"sep : {tokenizer.decode(all_special_ids)}")
-            utterance_idx = [[start+3, end] for start, end in zip(sep_idx[:-1], sep_idx[1:]) if (start+3) < end]
-            speaker_input_ids = [input_ids[0][i[0]:i[1]] for i in speaker_idx]
-            # for i in speaker_input_ids:
-            #     decoded_ids = tokenizer.decode(i)
-            decoded_ids = tokenizer.decode(input_ids[0])
-            # print(f"input_ids[0] : {input_ids[0]}")
-            # print(f"special_ids : {decoded_ids}")
-            # print(f"speaker_input_ids : {speaker_input_ids}")
+            sep_idx = [idx for ids, idx in zip(input_ids[0], range(input_ids.shape[1])) if ids == all_special_ids[4]]
+            sep_idx.append(input_ids.shape[1])
+            speaker_idx = [element+1 for element in sep_idx[:-1]]
+            utterance_idx = [[start+3, end-1] for start, end in zip(sep_idx[:-1], sep_idx[1:]) if (start+3) < (end-1)]
+            speaker_input_ids = [input_ids[0][i] for i in speaker_idx]
 
-            # print(f"sep_idx : {sep_idx}")
-            # print(f"speaker_idx : {speaker_idx}")
-            # print(f"utterance_idx : {utterance_idx}")
-            # print(f"all_special_ids : {all_special_ids}")
-
-        if ctr_mode == 0: # 기존 BART만 Training
+        if ctr_mode == 0: # 기존 koBART만 Training
             ctr_speaker_loss = torch.zeros(1, device=device)
             ctr_topic_loss = torch.zeros(1, device=device)
-        elif ctr_mode == 1: # BART + Spaeker-view
-            if len(speaker_idx) > 1:
-                # print("=======================================")
-                # decoded_ids = tokenizer.decode(all_special_ids)
-                # print(f"special_ids : {decoded_ids}")
-                # print(f"input_ids : {input_ids[0]}")
+        elif ctr_mode == 1: # koBART + Spaeker-view
+            if all_special_ids is not None:
                 # print(f"sep_idx : {sep_idx}")
                 # print(f"speaker_idx : {speaker_idx}")
                 # print(f"utterance_idx : {utterance_idx}")
                 # print(f"all_special_ids : {all_special_ids}")
-                # print("=======================================")
                 
-                # # speaker token들의 Encoder Representation
-                # enc_speaker = torch.row_stack([encoder_outputs[0][0][i] for i in speaker_idx])
-
-                # Speaker의 Encoder Representation -> Mean Pooling
-                enc_speaker = [encoder_outputs[0][0][i[0]:i[1]] for i in speaker_idx]
-                mean_speaker = torch.row_stack([torch.mean(i, 0) for i in enc_speaker])
-                # print(f"mean_speaker : {mean_speaker}")
+                # speaker token들의 Encoder Representation
+                enc_speaker = torch.row_stack([encoder_outputs[0][0][i] for i in speaker_idx])
                 # print(f"enc_speaker : {enc_speaker.shape}")
 
-
-                
                 # raw = [for i in raw_data]
                 
                 # print(f"self.num_try : {self.num_try}")
+
                 # decoded_ids = tokenizer.decode(input_ids[0])
                 # print(f"raw_data : {decoded_ids}")
                 # print(f"enc_speaker : {enc_speaker.shape}")
 
                 ############# 스피커 어웨어 부분 #################
                 ctr_speaker_loss = self.speaker_aware(
-                                    # enc_speaker=enc_speaker, # speaker의 representation list
-                                    enc_speaker=mean_speaker, # speaker의 representation list
-                                    ctr_margin=1, # ctrastive learning 시, margin 값
+                                    enc_speaker=enc_speaker, # speaker의 representation list
+                                    ctr_margin=0.5, # ctrastive learning 시, margin 값
                                     speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
                                     bench_speaker=0 # P01을 기준점 = 0번째 Speaker
                                 )
                 
                 ctr_topic_loss = torch.zeros(1, device=device)
-                # print(f"speaker_loss : {ctr_speaker_loss}, ctr_topic_loss : {ctr_topic_loss}")
-                # print(f"speaker_loss : {type(ctr_speaker_loss)}, ctr_topic_loss : {type(ctr_topic_loss)}")
-                # print(f"speaker_loss : {type(ctr_speaker_loss)}")
-                # print(f"speaker_loss : {ctr_speaker_loss}, ctr_topic_loss : {ctr_speaker_loss+ctr_topic_loss}")
                 # ctr_speaker_loss = torch.zeros(1, device=device)
-            else:
-                ctr_speaker_loss = torch.zeros(1, device=device)
-                ctr_topic_loss = torch.zeros(1, device=device)
         elif ctr_mode == 2: # koBART + Topic-view
-            if len(speaker_idx) > 1:
-                # Utterance의 Encoder Representation -> Mean Pooling
-                enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
-                    
-                # print("=======================================================================")
-                # print(f"sep_idx : {sep_idx}")
-                # print(f"speaker_idx : {speaker_idx}")
-                # print(f"utterance_idx : {utterance_idx}")
-                # print(f"all_special_ids : {all_special_ids}")
-                # print(f"enc_utterance.shape : {len(enc_utterance), enc_utterance[0].shape}")
-                # print(f"enc_utterance : {enc_utterance}")
-                    
-                mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
-                # print(f"mean : {mean_utterance.shape}")
-                # ########################################################################################################
-                ctr_topic_loss = self.topic_aware(enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
-                                ctr_margin=1, # ctrastive learning 시, margin 값
-                                cluster_mode=0, # 0=Kmeans, 1=Sequential, 2=DBSCAN
-                                raw_data=raw_data
-                                )
-                ctr_speaker_loss = torch.zeros(1, device=device)
-                # ########################################################################################################
-            else:
-                ctr_speaker_loss = torch.zeros(1, device=device)
-                ctr_topic_loss = torch.zeros(1, device=device)
+
+            # speaker token들의 Encoder Representation
+            enc_speaker = torch.row_stack([encoder_outputs[0][0][i] for i in speaker_idx])
+            # print(f"enc_speaker : {enc_speaker.shape}")
+
+            # Utterance의 Encoder Representation -> Mean Pooling
+            enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
+                
+            # print("=======================================================================")
+            # print(f"sep_idx : {sep_idx}")
+            # print(f"speaker_idx : {speaker_idx}")
+            # print(f"utterance_idx : {utterance_idx}")
+            # print(f"all_special_ids : {all_special_ids}")
+            # print(f"enc_utterance.shape : {len(enc_utterance), enc_utterance[0].shape}")
+            # print(f"enc_utterance : {enc_utterance}")
+                
+            mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
+            # print(f"mean : {mean_utterance.shape}")
+            # ########################################################################################################
+            ctr_topic_loss = self.topic_aware(enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
+                             ctr_margin=1, # ctrastive learning 시, margin 값
+                             cluster_mode=0, # 0=Kmeans, 1=DBSCAN
+                             raw_data=raw_data
+                             )
+            ctr_speaker_loss = torch.zeros(1, device=device)
+            # ########################################################################################################
+
 
         elif ctr_mode == 3: # koBART + Spaeker-view + Topic-view
-            if len(speaker_idx) > 1:
-                # Speaker의 Encoder Representation -> Mean Pooling
-                enc_speaker = [encoder_outputs[0][0][i[0]:i[1]] for i in speaker_idx]
-                mean_speaker = torch.row_stack([torch.mean(i, 0) for i in enc_speaker])
+            # Utterance의 Encoder Representation -> Mean Pooling
+            enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
+            mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
 
-                ############# 스피커 어웨어 부분 #################
-                ctr_speaker_loss = self.speaker_aware(
-                                        enc_speaker=mean_speaker, # speaker의 representation list
-                                        ctr_margin=1, # ctrastive learning 시, margin 값
-                                        speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
-                                        bench_speaker=0 # P01을 기준점 = 0번째 Speaker
-                                    )
-                # print(f"ctr_speaker_loss : {type(ctr_speaker_loss)}")
-
-                # Utterance의 Encoder Representation -> Mean Pooling
-                enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
-                mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
-
-                # ########################################################################################################
-                ctr_topic_loss = self.topic_aware(
-                                    enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
-                                    ctr_margin=1, # ctrastive learning 시, margin 값
-                                    cluster_mode=1, # 0=Kmeans, 1=Sequential, 2=DBSCAN
-                                    raw_data=raw_data
-                                )
-                # print(f"ctr_topic_loss : {ctr_topic_loss}")
-            else:
-                ctr_speaker_loss = torch.zeros(1, device=device)
-                ctr_topic_loss = torch.zeros(1, device=device)
-        
+            ############# 스피커 어웨어 부분 #################
+            ctr_speaker_loss = self.speaker_aware(
+                                    enc_speaker=enc_speaker, # speaker의 representation list
+                                    ctr_margin=0.5, # ctrastive learning 시, margin 값
+                                    speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
+                                    bench_speaker=0 # P01을 기준점 = 0번째 Speaker
+                            )
+                
+            ctr_topic_loss = self.topic_aware(enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
+                             ctr_margin=1, # ctrastive learning 시, margin 값
+                             cluster_mode=0, # 0=Kmeans, 1=DBSCAN
+                             raw_data=raw_data
+                             )
+            # ########################################################################################################
 
         # for i in no_padding_len[1:]:
         #     enc = torch.cat([enc_utterance[0:i], enc_utterance[i+1:i+1]])
@@ -968,12 +729,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
         #     encoder_attentions=outputs.encoder_attentions,
         # )
 
-        # ctr_loss_sum = outputs.ctr_speaker_loss + outputs.ctr_topic_loss
-        # print(f"ctr_loss : {ctr_loss_sum}")
-
         return CustomSeq2SeqLMOutput(
             loss=masked_lm_loss,
-            ctr_loss=torch.mean(outputs.ctr_speaker_loss) + torch.mean(outputs.ctr_topic_loss),
+            ctr_loss=outputs.ctr_speaker_loss + outputs.ctr_topic_loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,

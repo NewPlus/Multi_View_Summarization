@@ -2,22 +2,16 @@ from bartmodel import BartModel
 from data_preprocess import DataPreProcess
 
 # # Tokenizer와 Model 불러오기(gogamza/kobart-base-v2)
-model_name = "gogamza/kobart-base-v2"
+model_name = "facebook/bart-large"
 # tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = BartModel.from_pretrained(model_name)
+# model = BartModel.from_pretrained(model_name)
 
-dialogue_turn = []
 num_dialogue = 5
 
-datas = DataPreProcess(train_valid_test="train", data_file_type="csv", data_files="data/train.csv", model_name="gogamza/kobart-base-v2")
-print(f"datas : {datas}")
-input_ids, all_special_ids, vocab_size, raw_data = datas(num_dialogue=5)
+dialogue_turn = [0 if i < num_dialogue//2 else 1 for i in range(num_dialogue)]
+print(dialogue_turn)
 
-# Model special_token 추가한 수로 vocab_size 맞춰주기
-model.resize_token_embeddings(vocab_size)
-for id in input_ids:
-    # model에 tokenizer를 거친 Dialogue를 입력, all_special_ids에 special token들의 id List도 함께 전달
-    last_hidden_states = model(id, all_special_ids=all_special_ids, raw_data=raw_data).last_hidden_state
+# print(model)
 
 # # dataset 불러오기(csv)
 # datasets = load_dataset("csv", data_files="data/train.csv")

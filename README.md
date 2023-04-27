@@ -20,6 +20,13 @@
 - Speaker-Aware 1차 실험 (2023.04.09) : koBART보다 ROUGE1 기준 0.92 상승
 - Topic-Aware 실험 코드 (2023.04.09)
 - Topic-Aware 1차 실험 (2023.04.09) : koBART보다 ROUGE1 기준 0.8 상승
+- Multi-View 1차 실험 (2023.04.10)
+- Multi-View 1차 실험 (2023.04.10) : koBART보다 ROUGE1 기준 1.1 상승
+- 영어 데이터셋(SAMSum)을 메인으로 실험을 진행하여 성능 평가 코딩 (2023.04.10 ~ 2023.04.12)
+- 기존 BART로 Fine-tuning 후, 실험 진행(1차) (2023.04.12)
+- Speaker-Aware 실험 (2023.04.12~2023.04.25) : BART보다 ROUGE1 기준 0.03 상승
+- Topic-Aware 실험 (2023.04.12~2023.04.25) : BART보다 ROUGE1 기준 상승 X
+- Multi-View 실험 (2023.04.18~2023.04.25) : BART보다 ROUGE1 기준 0.16 상승
 
 ### Data_PreProcessing
 - SAMSum Dataset으로 Test준비(2023.03.31)
@@ -29,3 +36,4 @@
 - 잘못 이해한 내용 수정 -> 한 Dialogue를 통째로 넣어서 Speaker-Aware와 Topic-Aware진행하는 것으로 수정(2023.04.03 ~ 2023.04.04)
 - 전처리 부분 Class화 -> DataPreprocess Class(data_preprocess.py)로 객체화(2023.04.04)
 - 전치리 부분에서 랜덤 샘플링 중 이상 수정(2023.04.05)
+- 다시 SAMSum Dataset으로 실험 진행(2023.04.12)
