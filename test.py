@@ -7,5 +7,4 @@ print("b : ", b)
 
 c = a.detach().clone()
 print("c : ", c)
-
 print("a : ", a)
