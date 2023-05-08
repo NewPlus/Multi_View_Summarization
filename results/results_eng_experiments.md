@@ -21,6 +21,7 @@
 - [SAMSum](https://huggingface.co/datasets/samsum) 사용
 
 | Dialogue 1 |
+| --- |
 | Hannah: Hey, do you have Betty's number?
 Amanda: Lemme check
 Hannah: <file_gif>
