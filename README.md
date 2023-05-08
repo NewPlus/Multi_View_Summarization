@@ -6,6 +6,7 @@
 ## Directory
 ```
 .
+|-- PROCESS.md
 |-- README.md
 |-- bart_trainer.py
 |-- bartmodel.py
@@ -14,7 +15,10 @@
 |   |-- test.csv
 |   |-- train.csv
 |   `-- valid.csv
-`-- requirements.txt
+|-- requirements.txt
+`-- results
+    |-- results_eng_experiments.md
+    `-- results_kor_experiments.md
 ```
 
 # Tutorial
@@ -90,4 +94,9 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --output_dir "/root/bart_customize/test_save"
 ```
 
+# Results
+[Eng_results]()
+[Kor_results]()
+
 # Process
+[Process](https://github.com/NewPlus/Multi_View_Summarization/blob/main/PROCESS.md)
