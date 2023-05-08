@@ -20,8 +20,7 @@
 
 - [SAMSum](https://huggingface.co/datasets/samsum) 사용
 
-| Dialogue 1 | Dialogue 2 | Dialogue 3 |
-| --- | --- | --- |
+| Dialogue 1 |
 | Hannah: Hey, do you have Betty's number?
 Amanda: Lemme check
 Hannah: <file_gif>
@@ -36,7 +35,11 @@ Hannah: I'd rather you texted him
 Amanda: Just text him 🙂
 Hannah: Urgh.. Alright
 Hannah: Bye
-Amanda: Bye bye | Eric: MACHINE!
+Amanda: Bye bye |
+
+| Dialogue 2 |
+| --- |
+| Eric: MACHINE!
 Rob: That's so gr8!
 Eric: I know! And shows how Americans see Russian ;)
 Rob: And it's really funny!
@@ -51,7 +54,11 @@ Rob: Me too!
 Eric: MACHINE!
 Rob: MACHINE!
 Eric: TTYL?
-Rob: Sure :) | Lenny: Babe, can you help me with something?
+Rob: Sure :) |
+
+| Dialogue 3 |
+| --- |
+| Lenny: Babe, can you help me with something?
 Bob: Sure, what's up?
 Lenny: Which one should I pick?
 Bob: Send me photos
@@ -68,8 +75,8 @@ Bob: Pick the best quality then
 Lenny: ur right, thx
 Bob: no prob :) |
 
-| Dialogue 4 | Dialogue 5 |
-| --- | --- |
+| Dialogue 4 |
+| --- |
 | Will: hey babe, what do you want for dinner tonight?
 Emma:  gah, don't even worry about it tonight
 Will: what do you mean? everything ok?
@@ -79,7 +86,11 @@ Emma: soon, hopefully
 Will: you sure? Maybe you want me to pick you up?
 Emma: no no it's alright. I'll be home soon, i'll tell you when I get home.
 Will: Alright, love you.
-Emma: love you too. | Ollie: Hi , are you in Warsaw
+Emma: love you too. |
+
+| Dialogue 5 |
+| --- |
+| Ollie: Hi , are you in Warsaw
 Jane: yes, just back! Btw are you free for diner the 19th?
 Ollie: nope!
 Jane: and the  18th?
