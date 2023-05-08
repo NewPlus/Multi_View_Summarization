@@ -4,18 +4,18 @@
 - PyTorch, Huggingface
 
 # Tutorial
-'''
+```
 cd bart_customize/
-'''
+```
 ## Setting
 - docker container
-'''
+```
 docker run -it --name multi_view_yh -p [port num]:[port num] -v [current root] --shm-size=[memory size] --gpus '"device=[gpu num]"' pytorch/pytorch:1.12.1-cuda11.3-cudnn8-devel
-'''
+```
 - pip install requirements
-'''
+```
 pip install -r requirements.txt
-'''
+```
 
 ## Experiments
 - Baseline Experiments
@@ -24,7 +24,7 @@ pip install -r requirements.txt
 - Multi-Aware Experiments
 
 ### Baseline Experiments
-'''
+```
 CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --model_name "facebook/bart-large" \
 --data_name "samsum" \
@@ -34,10 +34,10 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --set_seed 100 \
 --cluster_mode 1 \
 --output_dir "/root/bart_customize/test_save"
-'''
+```
 
 ### Speaker-Aware Experiments
-'''
+```
 CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --model_name "facebook/bart-large" \
 --data_name "samsum" \
@@ -47,10 +47,10 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --set_seed 100 \
 --cluster_mode 1 \
 --output_dir "/root/bart_customize/test_save"
-'''
+```
 
 ### Topic-Aware Experiments
-'''
+```
 CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --model_name "facebook/bart-large" \
 --data_name "samsum" \
@@ -60,10 +60,10 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --set_seed 100 \
 --cluster_mode 1 \
 --output_dir "/root/bart_customize/test_save"
-'''
+```
 
 ### Multi-Aware Experiments
-'''
+```
 CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --model_name "facebook/bart-large" \
 --data_name "samsum" \
@@ -73,10 +73,10 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --set_seed 100 \
 --cluster_mode 1 \
 --output_dir "/root/bart_customize/test_save"
-'''
+```
 
 ## Directory
-'''
+```
 .
 |-- README.md
 |-- bart_trainer.py
@@ -87,7 +87,7 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 |   |-- train.csv
 |   `-- valid.csv
 `-- requirements.txt
-'''
+```
 
 ## Process
 ### Experimental
