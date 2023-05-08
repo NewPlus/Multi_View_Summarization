@@ -1,9 +1,96 @@
 # Multi_View_Summarization
-- 논문 준비 기록 git
-- 2023
+- 화자 및 주제 대조 학습을 통한 대화 요약 성능 향상
+- 2023.05.02
+- PyTorch, Huggingface
+
+# Tutorial
+'''
+cd bart_customize/
+'''
+## Setting
+- docker container
+'''
+docker run -it --name multi_view_yh -p [port num]:[port num] -v [current root] --shm-size=[memory size] --gpus '"device=[gpu num]"' pytorch/pytorch:1.12.1-cuda11.3-cudnn8-devel
+'''
+- pip install requirements
+'''
+pip install -r requirements.txt
+'''
+
+## Experiments
+- Baseline Experiments
+- Speaker-Aware Experiments
+- Topic-Aware Experiments
+- Multi-Aware Experiments
+
+### Baseline Experiments
+'''
+CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
+--model_name "facebook/bart-large" \
+--data_name "samsum" \
+--ctr_mode 0 \
+--lamda 0.08 \
+--batch_size 8 \
+--set_seed 100 \
+--cluster_mode 1 \
+--output_dir "/root/bart_customize/test_save"
+'''
+
+### Speaker-Aware Experiments
+'''
+CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
+--model_name "facebook/bart-large" \
+--data_name "samsum" \
+--ctr_mode 1 \
+--lamda 0.08 \
+--batch_size 8 \
+--set_seed 100 \
+--cluster_mode 1 \
+--output_dir "/root/bart_customize/test_save"
+'''
+
+### Topic-Aware Experiments
+'''
+CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
+--model_name "facebook/bart-large" \
+--data_name "samsum" \
+--ctr_mode 2 \
+--lamda 0.08 \
+--batch_size 8 \
+--set_seed 100 \
+--cluster_mode 1 \
+--output_dir "/root/bart_customize/test_save"
+'''
+
+### Multi-Aware Experiments
+'''
+CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
+--model_name "facebook/bart-large" \
+--data_name "samsum" \
+--ctr_mode 3 \
+--lamda 0.08 \
+--batch_size 8 \
+--set_seed 100 \
+--cluster_mode 1 \
+--output_dir "/root/bart_customize/test_save"
+'''
+
+## Directory
+'''
+.
+|-- README.md
+|-- bart_trainer.py
+|-- bartmodel.py
+|-- data
+|   |-- dialogue.json
+|   |-- test.csv
+|   |-- train.csv
+|   `-- valid.csv
+`-- requirements.txt
+'''
 
 ## Process
-### Baseline
+### Experimental
 - HuggingFace Transformers 라이브러리의 BartModel 클래스 불러와서 Encoder Output만 코딩할 수 있도록 코드 가져오기(2023.03.30)
     - BartModel만 수정하고 나머지는 원래 Transformers 라이브러리 그대로 똑같이 사용
 - Speaker-Aware()와 Topic-Aware() 멤버 함수로 추가해두고 bart_test.py로 테스트 세팅(2023.03.31)

@@ -15,8 +15,6 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 import datasets
 
-from bart_trainer import set_seed, gpu_use, model_name
-
 from transformers.utils import (
     logging
 )
@@ -43,12 +41,40 @@ from transformers.models.bart.modeling_bart import (
     add_start_docstrings_to_model_forward,
 )
 
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple, Union
+from transformers import Seq2SeqTrainingArguments, HfArgumentParser
+
+@dataclass
+class RunArguments:
+    model_name: str = field(default="facebook/bart-large")
+    data_name: str = field(default="samsum")
+    ctr_mode: int = field(default=3)
+    lamda: Optional[float] = field(default=0.08)
+    batch_size: int = field(default=8)
+    set_seed: int = field(default=100)
+    cluster_mode: int = field(default=1)
+
+parser = HfArgumentParser((Seq2SeqTrainingArguments, RunArguments))
+training_args, run_args = parser.parse_args_into_dataclasses()
+
+ctr_mode = run_args.ctr_mode
+lamda = run_args.lamda
+model_name = run_args.model_name # "facebook/bart-large"
+batch_size = run_args.batch_size
+set_seed = run_args.set_seed
+cluster_mode = run_args.cluster_mode
+
+# print(f"gpu_use : {gpu_use}")
+
 import os
 # for Using an One GPU!!
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = gpu_use
+# os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"  # Arrange GPU devices starting from 0
+# os.environ["CUDA_VISIBLE_DEVICES"]= gpu_use  # Set the GPU gpu_use to use
 device = torch.device("cuda")
 print(f"device : {device}")
+print('Current cuda device:', torch.cuda.current_device())
+print('Count of using GPUs:', torch.cuda.device_count())
 logger = logging.get_logger(__name__)
 
 # 고정할 시드 값 설정
@@ -60,6 +86,7 @@ torch.manual_seed(seed)
 
 # NumPy 시드 고정
 np.random.seed(seed)
+
 
 
 @dataclass

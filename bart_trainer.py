@@ -9,7 +9,7 @@ from transformers import Seq2SeqTrainingArguments, Seq2SeqTrainer, HfArgumentPar
 from bartmodel import BartForConditionalGeneration
 import numpy as np
 import re
-import wandb
+import torch
 
 @dataclass
 class RunArguments:
@@ -18,7 +18,6 @@ class RunArguments:
     ctr_mode: int = field(default=3)
     lamda: Optional[float] = field(default=0.08)
     batch_size: int = field(default=8)
-    gpu_use: str = field(default="0")
     set_seed: int = field(default=100)
     cluster_mode: int = field(default=1)
 
@@ -29,9 +28,16 @@ ctr_mode = run_args.ctr_mode
 lamda = run_args.lamda
 model_name = run_args.model_name # "facebook/bart-large"
 batch_size = run_args.batch_size
-gpu_use = run_args.gpu_use
 set_seed = run_args.set_seed
 cluster_mode = run_args.cluster_mode
+
+# for Using an One GPU!!
+# os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"  # Arrange GPU devices starting from 0
+# os.environ["CUDA_VISIBLE_DEVICES"]= gpu_use  # Set the GPU gpu_use to use
+device = torch.device("cuda")
+print(f"trainer device : {device}")
+
+# ctr_mode, lamda, model_name, batch_size, gpu_use, set_seed, cluster_mode = argument_experiments(training_args, run_args)
 
 # Define the preprocessing function
 def preprocess_function(examples):
@@ -81,7 +87,7 @@ class BartTrainer(Seq2SeqTrainer):
                         all_special_ids=self.all_special_ids, 
                         raw_data=self.raw_data,
                         ctr_mode=ctr_mode,
-                        cluster_mode=cluster_mode
+                        cluster_mode=cluster_mode,
                         )
         
         # Save past state if it exists
@@ -103,12 +109,6 @@ class BartTrainer(Seq2SeqTrainer):
         # final_loss : generation loss + contrastive loss
         final_loss = loss + lamda * outputs.ctr_loss
         return (final_loss, outputs) if return_outputs else final_loss
-
-# We use wandb logger: https://wandb.ai/site.
-if training_args.local_rank == 0:  # only on main process
-    # Initialize wandb run
-    wandb.login()
-    wandb.init(project="Multi-View_Dialogue_Summary", name=training_args.run_name)
 
 # dataset is SAMSum
 datasets = load_dataset(run_args.data_name) # "samsum")
