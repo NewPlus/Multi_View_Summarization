@@ -95,8 +95,8 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 ```
 
 # Results
-[Eng_results]()
-[Kor_results]()
+[Eng_results](https://github.com/NewPlus/Multi_View_Summarization/blob/main/results/results_eng_experiments.md)
+[Kor_results](https://github.com/NewPlus/Multi_View_Summarization/blob/main/results/results_kor_experiments.md)
 
 # Process
 [Process](https://github.com/NewPlus/Multi_View_Summarization/blob/main/PROCESS.md)

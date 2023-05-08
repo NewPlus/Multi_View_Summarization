@@ -1,11 +1,4 @@
 # 2차 Baseline 실험 전반 정리(Kor)
-
-목차
-
----
-
----
-
 # Baseline Expermental
 
 - Baseline 실험 결과 정리
