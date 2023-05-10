@@ -6,10 +6,12 @@
 - [PyTorch](https://pytorch.org/), [Huggingface](https://huggingface.co/)
 
 ## Model Architecture
-
+![architecture](experimental_img/model_architecture.png)
 - BART 모델을 Summarization Task로 Fine-tuning
-- Encoder의 Representation을 Contrastive Learning
-    - Speaker-Aware : Dialogue의 Speaker Token Representation들을 Speaker가 같으면 Representation이 유사하도록, 다르면 Repre
+- Encoder의 Representation을 Contrastive Learning으로 조정하는 Auxiliary task를 추가
+    - Speaker-Aware : Dialogue의 Speaker Token Representation들을 Speaker가 같으면 Representation이 유사하도록, 다르면 Representation을 조정
+    - Topic-Aware : Dialogue의 Utterance Token Representation들을 K-Means Algorithms으로 Clustering ->  Cluster가 같으면 Representation이 유사하도록, 다르면 Representation을 조정
+    - Multi-Aware : 위 Speaker-Aware와 Topic-Aware를 모두 진행하여 Encoder Representation들을 조정
 
 ## Directory
 ```
@@ -56,58 +58,6 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --model_name "facebook/bart-large" \
 --data_name "samsum" \
 --ctr_mode "baseline" \
---lamda 0.08 \
---batch_size 8 \
---set_seed 100 \
---cluster_mode 1 \
---output_dir "/root/bart_customize/test_save"
-```
-
-### Baseline Experiments
-```
-CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
---model_name "facebook/bart-large" \
---data_name "samsum" \
---ctr_mode 0 \
---lamda 0.08 \
---batch_size 8 \
---set_seed 100 \
---cluster_mode 1 \
---output_dir "/root/bart_customize/test_save"
-```
-
-### Speaker-Aware Experiments
-```
-CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
---model_name "facebook/bart-large" \
---data_name "samsum" \
---ctr_mode 1 \
---lamda 0.08 \
---batch_size 8 \
---set_seed 100 \
---cluster_mode 1 \
---output_dir "/root/bart_customize/test_save"
-```
-
-### Topic-Aware Experiments
-```
-CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
---model_name "facebook/bart-large" \
---data_name "samsum" \
---ctr_mode 2 \
---lamda 0.08 \
---batch_size 8 \
---set_seed 100 \
---cluster_mode 1 \
---output_dir "/root/bart_customize/test_save"
-```
-
-### Multi-Aware Experiments
-```
-CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
---model_name "facebook/bart-large" \
---data_name "samsum" \
---ctr_mode 3 \
 --lamda 0.08 \
 --batch_size 8 \
 --set_seed 100 \
