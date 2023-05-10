@@ -2,5 +2,4 @@ test_save/
 __pycache__/
 nohup.out
 experimental_log/
-experimental_img/
 kor_experiments/

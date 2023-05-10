@@ -3,21 +3,12 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from sklearn.cluster import KMeans, DBSCAN
-from sklearn.decomposition import PCA
-
+from sklearn.cluster import KMeans
 import numpy as np
-
 import random
 import pandas as pd
-import matplotlib.pyplot as plt
-
-from dataclasses import dataclass
 import datasets
-
-from transformers.utils import (
-    logging
-)
+from transformers.utils import logging
 from transformers.utils import (
     add_end_docstrings,
     replace_return_docstrings,
@@ -40,10 +31,9 @@ from transformers.models.bart.modeling_bart import (
     add_code_sample_docstrings,
     add_start_docstrings_to_model_forward,
 )
-
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Union
 from transformers import Seq2SeqTrainingArguments, HfArgumentParser
+
 
 @dataclass
 class RunArguments:
@@ -55,26 +45,21 @@ class RunArguments:
     set_seed: int = field(default=100)
     cluster_mode: int = field(default=1)
 
+
 parser = HfArgumentParser((Seq2SeqTrainingArguments, RunArguments))
 training_args, run_args = parser.parse_args_into_dataclasses()
 
 ctr_mode = run_args.ctr_mode
 lamda = run_args.lamda
-model_name = run_args.model_name # "facebook/bart-large"
+model_name = run_args.model_name  # "facebook/bart-large"
 batch_size = run_args.batch_size
 set_seed = run_args.set_seed
 cluster_mode = run_args.cluster_mode
 
-# print(f"gpu_use : {gpu_use}")
-
-import os
-# for Using an One GPU!!
-# os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"  # Arrange GPU devices starting from 0
-# os.environ["CUDA_VISIBLE_DEVICES"]= gpu_use  # Set the GPU gpu_use to use
 device = torch.device("cuda")
 print(f"device : {device}")
-print('Current cuda device:', torch.cuda.current_device())
-print('Count of using GPUs:', torch.cuda.device_count())
+print("Current cuda device:", torch.cuda.current_device())
+print("Count of using GPUs:", torch.cuda.device_count())
 logger = logging.get_logger(__name__)
 
 # 고정할 시드 값 설정
@@ -86,7 +71,6 @@ torch.manual_seed(seed)
 
 # NumPy 시드 고정
 np.random.seed(seed)
-
 
 
 @dataclass
@@ -102,6 +86,7 @@ class CustomSeq2SeqLMOutput(Seq2SeqLMOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     ctr_loss: torch.FloatTensor = None
 
+
 @dataclass
 class CustomSeq2SeqModelOutput(Seq2SeqModelOutput):
     last_hidden_state: torch.FloatTensor = None
@@ -115,18 +100,19 @@ class CustomSeq2SeqModelOutput(Seq2SeqModelOutput):
     ctr_speaker_loss: torch.FloatTensor = None
     ctr_topic_loss: torch.FloatTensor = None
 
+
 class BartModel(BartPretrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
-        
+
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
-        
+
         self.num_try = 0
 
         # Initialize weights and apply final processing
@@ -167,16 +153,30 @@ class BartModel(BartPretrainedModel):
             if len(enc_positive) > 0 and len(enc_negative) > 0:
                 relu = nn.ReLU()
 
-                positive_sample_l2 = torch.stack([torch.dist(positive, enc_speaker[bench_speaker], p=2.0) for positive in enc_positive])
-                negative_sample_l2 = torch.stack([torch.dist(negative, enc_speaker[bench_speaker], p=2.0) for negative in enc_negative])
+                positive_sample_l2 = torch.stack(
+                    [
+                        torch.dist(positive, enc_speaker[bench_speaker], p=2.0)
+                        for positive in enc_positive
+                    ]
+                )
+                negative_sample_l2 = torch.stack(
+                    [
+                        torch.dist(negative, enc_speaker[bench_speaker], p=2.0)
+                        for negative in enc_negative
+                    ]
+                )
 
                 ctr_speaker_loss_lists = []
                 for negative_sample in negative_sample_l2:
                     for positive_sample in positive_sample_l2:
-                        softmax_sim_out = nn.functional.softmax(torch.stack([1-positive_sample, 1-negative_sample]), dim=0)
+                        softmax_sim_out = nn.functional.softmax(
+                            torch.stack([1 - positive_sample, 1 - negative_sample]), dim=0
+                        )
                         positive_softmax = softmax_sim_out[0]
                         negative_softmax = softmax_sim_out[1]
-                        ctr_speaker_loss_lists.append(relu(ctr_margin - (positive_softmax - negative_softmax)))
+                        ctr_speaker_loss_lists.append(
+                            relu(ctr_margin - (positive_softmax - negative_softmax))
+                        )
                 ctr_speaker_loss_list = torch.stack(ctr_speaker_loss_lists)
                 ctr_speaker_loss = torch.mean(ctr_speaker_loss_list)
                 ctr_speaker_loss_means.append(ctr_speaker_loss)
@@ -190,7 +190,7 @@ class BartModel(BartPretrainedModel):
         else:
             ctr_speaker_loss_result = torch.stack(ctr_speaker_loss_means)
             return ctr_speaker_loss_result
-    
+
     def topic_aware(self, enc_utterance, ctr_margin, cluster_mode):
         df = pd.DataFrame()
         num_turn = len(enc_utterance)
@@ -201,19 +201,17 @@ class BartModel(BartPretrainedModel):
 
         if cluster_mode == 0:
             num_cluster = 2
-            kmeans = KMeans(n_clusters=num_cluster, init='k-means++').fit(enc_utterance.cpu().detach().numpy())
-            df = pd.DataFrame({'enc_rep' : enc_rep, 'cluster' : kmeans.labels_})
+            kmeans = KMeans(n_clusters=num_cluster, init="k-means++").fit(
+                enc_utterance.cpu().detach().numpy()
+            )
+            df = pd.DataFrame({"enc_rep": enc_rep, "cluster": kmeans.labels_})
             centroid = torch.Tensor(kmeans.cluster_centers_).to(device)
-            
-            bench_cluster = df["cluster"][0]
-            bench_turn = enc_utterance[0]
-
             relu = nn.ReLU()
             ctr_topic_loss_means = []
             for bench in range(num_cluster):
                 positive_idx = df[df["cluster"] == bench][1:].index.to_numpy()
                 negative_idx = df[df["cluster"] != bench].index.to_numpy()
-                
+
                 if len(positive_idx) < 1 or len(negative_idx) < 1:
                     return torch.zeros(1, device=device)
 
@@ -222,25 +220,31 @@ class BartModel(BartPretrainedModel):
 
                 negative_sample_l2 = [torch.dist(n, centroid[bench], p=2.0) for n in negative]
                 positive_sample_l2 = [torch.dist(p, centroid[bench], p=2.0) for p in positive]
-                
+
                 ctr_topic_loss_lists = []
                 for negative_sample in negative_sample_l2:
                     for positive_sample in positive_sample_l2:
-                        softmax_sim_out = nn.functional.softmax(torch.stack([1-positive_sample, 1-negative_sample]), dim=0)
+                        softmax_sim_out = nn.functional.softmax(
+                            torch.stack([1 - positive_sample, 1 - negative_sample]), dim=0
+                        )
                         positive_softmax = softmax_sim_out[0]
                         negative_softmax = softmax_sim_out[1]
-                        ctr_topic_loss_lists.append(relu(ctr_margin - (positive_softmax - negative_softmax)))
+                        ctr_topic_loss_lists.append(
+                            relu(ctr_margin - (positive_softmax - negative_softmax))
+                        )
                 ctr_topic_loss_list = torch.stack(ctr_topic_loss_lists)
                 ctr_topic_loss = torch.mean(ctr_topic_loss_list)
                 ctr_topic_loss_means.append(ctr_topic_loss)
-            
+
             ctr_topic_loss_result = torch.stack(ctr_topic_loss_means)
             return ctr_topic_loss_result
 
         elif cluster_mode == 1:
-            turn_topics = [0 if i < num_turn//2 else 1 for i in range(num_turn)]
-            centroid = torch.stack([enc_utterance[num_turn//4], enc_utterance[num_turn//2 + num_turn//4]])
-            df = pd.DataFrame({'enc_rep' : enc_rep, 'cluster' : turn_topics})
+            turn_topics = [0 if i < num_turn // 2 else 1 for i in range(num_turn)]
+            centroid = torch.stack(
+                [enc_utterance[num_turn // 4], enc_utterance[num_turn // 2 + num_turn // 4]]
+            )
+            df = pd.DataFrame({"enc_rep": enc_rep, "cluster": turn_topics})
 
             relu = nn.ReLU()
             ctr_topic_loss_means = []
@@ -253,20 +257,24 @@ class BartModel(BartPretrainedModel):
 
                     negative_sample_l2 = [torch.dist(n, centroid[bench], p=2.0) for n in negative]
                     positive_sample_l2 = [torch.dist(p, centroid[bench], p=2.0) for p in positive]
-                    
+
                     ctr_topic_loss_lists = []
                     for negative_sample in negative_sample_l2:
                         for positive_sample in positive_sample_l2:
-                            softmax_sim_out = nn.functional.softmax(torch.stack([1-positive_sample, 1-negative_sample]), dim=0)
+                            softmax_sim_out = nn.functional.softmax(
+                                torch.stack([1 - positive_sample, 1 - negative_sample]), dim=0
+                            )
                             positive_softmax = softmax_sim_out[0]
                             negative_softmax = softmax_sim_out[1]
-                            ctr_topic_loss_lists.append(relu(ctr_margin - (positive_softmax - negative_softmax)))
+                            ctr_topic_loss_lists.append(
+                                relu(ctr_margin - (positive_softmax - negative_softmax))
+                            )
                     ctr_topic_loss_list = torch.stack(ctr_topic_loss_lists)
                     ctr_topic_loss = torch.mean(ctr_topic_loss_list)
                     ctr_topic_loss_means.append(ctr_topic_loss)
             ctr_topic_loss_result = torch.stack(ctr_topic_loss_means)
             return ctr_topic_loss_result
-    
+
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -310,9 +318,13 @@ class BartModel(BartPretrainedModel):
                 input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -327,7 +339,7 @@ class BartModel(BartPretrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        
+
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -337,82 +349,92 @@ class BartModel(BartPretrainedModel):
             )
 
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        tokenizer.add_special_tokens({"additional_special_tokens":["<sep>", ":"]})
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<sep>", ":"]})
 
         if all_special_ids is not None:
-            lang_sep = 5 # English
-            sep_idx = [idx for ids, idx in zip(input_ids[0], range(input_ids.shape[1])) if ids == all_special_ids[lang_sep]]
+            lang_sep = 5  # English
+            sep_idx = [
+                idx
+                for ids, idx in zip(input_ids[0], range(input_ids.shape[1]))
+                if ids == all_special_ids[lang_sep]
+            ]
             speaker_idx = []
             for idx in sep_idx:
                 ids = idx
-                while ids < len(input_ids[0]) and input_ids[0][ids] != all_special_ids[lang_sep+1]:
+                while (
+                    ids < len(input_ids[0]) and input_ids[0][ids] != all_special_ids[lang_sep + 1]
+                ):
                     ids += 1
-                speaker_idx.append([idx+1, ids])
-            
-            utterance_idx = [[start+3, end] for start, end in zip(sep_idx[:-1], sep_idx[1:]) if (start+3) < end]
-            speaker_input_ids = [input_ids[0][i[0]:i[1]] for i in speaker_idx]
-            decoded_ids = tokenizer.decode(input_ids[0])
+                speaker_idx.append([idx + 1, ids])
 
-        if ctr_mode == 0: # 기존 BART만 Training
+            utterance_idx = [
+                [start + 3, end]
+                for start, end in zip(sep_idx[:-1], sep_idx[1:])
+                if (start + 3) < end
+            ]
+            speaker_input_ids = [input_ids[0][i[0]:i[1]] for i in speaker_idx]
+
+        if ctr_mode == 0:  # 기존 BART만 Training
             ctr_speaker_loss = torch.zeros(1, device=device)
             ctr_topic_loss = torch.zeros(1, device=device)
-        elif ctr_mode == 1: # BART + Spaeker-Aware
+        elif ctr_mode == 1:  # BART + Spaeker-Aware
             if len(speaker_idx) > 1:
                 enc_speaker = [encoder_outputs[0][0][i[0]:i[1]] for i in speaker_idx]
                 mean_speaker = torch.row_stack([torch.mean(i, 0) for i in enc_speaker])
 
-                ############# Speaker-Aware #################
+                # Speaker-Aware
                 ctr_speaker_loss = self.speaker_aware(
-                                    enc_speaker=mean_speaker, # speaker의 representation list
-                                    ctr_margin=1, # ctrastive learning 시, margin 값
-                                    speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
-                                    bench_speaker=0 # P01을 기준점 = 0번째 Speaker
-                                )
+                    enc_speaker=mean_speaker,  # speaker의 representation list
+                    ctr_margin=1,  # ctrastive learning 시, margin 값
+                    speaker_input_ids=speaker_input_ids,  # Dialogue 안 Speaker Token들의 input_ids list
+                    bench_speaker=0,  # P01을 기준점 = 0번째 Speaker
+                )
                 ctr_topic_loss = torch.zeros(1, device=device)
             else:
                 ctr_speaker_loss = torch.zeros(1, device=device)
                 ctr_topic_loss = torch.zeros(1, device=device)
 
-        elif ctr_mode == 2: # koBART + Topic-view
+        elif ctr_mode == 2:  # koBART + Topic-view
             if len(speaker_idx) > 1:
                 # Utterance의 Encoder Representation -> Mean Pooling
-                enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]    
+                enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
                 mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
-                
-                ############# Topic-Aware #################
-                ctr_topic_loss = self.topic_aware(enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
-                                ctr_margin=1, # ctrastive learning 시, margin 값
-                                cluster_mode=cluster_mode, # 0=Kmeans, 1=Sequential
-                                )
+
+                # Topic-Aware
+                ctr_topic_loss = self.topic_aware(
+                    enc_utterance=mean_utterance,  # Mean Pooling한 utterance의 representation list
+                    ctr_margin=1,  # ctrastive learning 시, margin 값
+                    cluster_mode=cluster_mode,  # 0=Kmeans, 1=Sequential
+                )
                 ctr_speaker_loss = torch.zeros(1, device=device)
             else:
                 ctr_speaker_loss = torch.zeros(1, device=device)
                 ctr_topic_loss = torch.zeros(1, device=device)
 
-        elif ctr_mode == 3: # koBART + Spaeker-view + Topic-view
+        elif ctr_mode == 3:  # koBART + Spaeker-view + Topic-view
             if len(speaker_idx) > 1:
                 # Speaker의 Encoder Representation -> Mean Pooling
                 enc_speaker = [encoder_outputs[0][0][i[0]:i[1]] for i in speaker_idx]
                 mean_speaker = torch.row_stack([torch.mean(i, 0) for i in enc_speaker])
 
-                ############# Speaker-Aware #################
+                # Speaker-Aware
                 ctr_speaker_loss = self.speaker_aware(
-                                        enc_speaker=mean_speaker, # speaker의 representation list
-                                        ctr_margin=1, # ctrastive learning 시, margin 값
-                                        speaker_input_ids=speaker_input_ids, # Dialogue 안 Speaker Token들의 input_ids list
-                                        bench_speaker=0 # P01을 기준점 = 0번째 Speaker
-                                    )
+                    enc_speaker=mean_speaker,  # speaker의 representation list
+                    ctr_margin=1,  # ctrastive learning 시, margin 값
+                    speaker_input_ids=speaker_input_ids,  # Dialogue 안 Speaker Token들의 input_ids list
+                    bench_speaker=0,  # P01을 기준점 = 0번째 Speaker
+                )
 
                 # Utterance의 Encoder Representation -> Mean Pooling
                 enc_utterance = [encoder_outputs[0][0][i[0]:i[1]] for i in utterance_idx]
                 mean_utterance = torch.row_stack([torch.mean(i, 0) for i in enc_utterance])
 
-                ############# Topic-Aware #################
+                # Topic-Aware
                 ctr_topic_loss = self.topic_aware(
-                                    enc_utterance=mean_utterance, # Mean Pooling한 utterance의 representation list
-                                    ctr_margin=1, # ctrastive learning 시, margin 값
-                                    cluster_mode=cluster_mode, # 0=Kmeans, 1=Sequential
-                                )
+                    enc_utterance=mean_utterance,  # Mean Pooling한 utterance의 representation list
+                    ctr_margin=1,  # ctrastive learning 시, margin 값
+                    cluster_mode=cluster_mode,  # 0=Kmeans, 1=Sequential
+                )
             else:
                 ctr_speaker_loss = torch.zeros(1, device=device)
                 ctr_topic_loss = torch.zeros(1, device=device)
@@ -448,6 +470,7 @@ class BartModel(BartPretrainedModel):
             ctr_topic_loss=ctr_topic_loss,
         )
 
+
 class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
@@ -460,7 +483,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
     def __init__(self, config: BartConfig):
         super().__init__(config)
         self.model = BartModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.register_buffer(
+            "final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings))
+        )
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -482,7 +507,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
         if new_num_tokens <= old_num_tokens:
             new_bias = self.final_logits_bias[:, :new_num_tokens]
         else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
+            extra_bias = torch.zeros(
+                (1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device
+            )
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
@@ -530,7 +557,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
 
         if labels is not None:
             if use_cache:
-                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+                logger.warning(
+                    "The `use_cache` argument is changed to `False` since `labels` is provided."
+                )
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
@@ -559,7 +588,6 @@ class BartForConditionalGeneration(BartPretrainedModel):
             cluster_mode=cluster_mode,
         )
 
-        # print(f"outputs[0] : {len(outputs[0])}")
         lm_logits = self.lm_head(outputs[0])
         lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
 
@@ -571,7 +599,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-        
+
         return CustomSeq2SeqLMOutput(
             loss=masked_lm_loss,
             ctr_loss=torch.mean(outputs.ctr_speaker_loss) + torch.mean(outputs.ctr_topic_loss),
@@ -616,7 +644,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+        return shift_tokens_right(
+            labels, self.config.pad_token_id, self.config.decoder_start_token_id
+        )
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
@@ -624,6 +654,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
         for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past

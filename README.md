@@ -1,7 +1,15 @@
-# Multi_View_Summarization
-- 화자 및 주제 대조 학습을 통한 대화 요약 성능 향상
-- 2023.05.02
-- PyTorch, Huggingface
+# Improving Dialogue Summarization with Speaker-aware and Topic-aware Contrastive Learning
+- Authors: Yonghwan Lee, Jinhyeong Lim, Hyeon-Je Song
+- 대화문(Dialogue)의 화자(Speaker)와 주제(Topic) 정보를 동시에 고려하는 다중 관점 대조 학습(Multi-Aware Contrastive Learning)을 추가하여 대화 요약 모델(Dialogue Summarization Model)의 성능을 향상
+- 한국정보과학회 제출 : [KCC2023](https://www.kiise.or.kr/conference/kcc/2023/)
+- 2023.05.01
+- [PyTorch](https://pytorch.org/), [Huggingface](https://huggingface.co/)
+
+## Model Architecture
+
+- BART 모델을 Summarization Task로 Fine-tuning
+- Encoder의 Representation을 Contrastive Learning
+    - Speaker-Aware : Dialogue의 Speaker Token Representation들을 Speaker가 같으면 Representation이 유사하도록, 다르면 Repre
 
 ## Directory
 ```
@@ -22,15 +30,7 @@
 ```
 
 # Tutorial
-## Setting
-- docker container
-```
-docker run -it --name multi_view_yh -p [port num]:[port num] -v [current root] --shm-size=[memory size] --gpus '"device=[gpu num]"' pytorch/pytorch:1.12.1-cuda11.3-cudnn8-devel
-```
-- directory
-```
-cd bart_customize/
-```
+## Installation
 - pip install requirements
 ```
 pip install -r requirements.txt
@@ -38,9 +38,30 @@ pip install -r requirements.txt
 
 ## Experiments
 - Baseline Experiments
+    - 기존 BART 모델을 Fine-tuning
+    - ctr_mode = "baseline"
 - Speaker-Aware Experiments
+    - BART + Speaker-Aware
+    - ctr_mode = "speaker"
 - Topic-Aware Experiments
+    - BART + Topic-Aware
+    - ctr_mode = "topic"
 - Multi-Aware Experiments
+    - BART + Speaker-Aware + Topic-Aware
+    - ctr_mode = "multi"
+
+- Example of Baseline
+```
+CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
+--model_name "facebook/bart-large" \
+--data_name "samsum" \
+--ctr_mode "baseline" \
+--lamda 0.08 \
+--batch_size 8 \
+--set_seed 100 \
+--cluster_mode 1 \
+--output_dir "/root/bart_customize/test_save"
+```
 
 ### Baseline Experiments
 ```
@@ -95,8 +116,3 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 ```
 
 # Results
-[Eng_results](https://github.com/NewPlus/Multi_View_Summarization/blob/main/results/results_eng_experiments.md)
-[Kor_results](https://github.com/NewPlus/Multi_View_Summarization/blob/main/results/results_kor_experiments.md)
-
-# Process
-[Process](https://github.com/NewPlus/Multi_View_Summarization/blob/main/PROCESS.md)
