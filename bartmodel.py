@@ -39,7 +39,7 @@ from transformers import Seq2SeqTrainingArguments, HfArgumentParser
 class RunArguments:
     model_name: str = field(default="facebook/bart-large")
     data_name: str = field(default="samsum")
-    ctr_mode: int = field(default=3)
+    ctr_mode: str = field(default="baseline")
     lamda: Optional[float] = field(default=0.08)
     batch_size: int = field(default=8)
     set_seed: int = field(default=100)
@@ -49,9 +49,16 @@ class RunArguments:
 parser = HfArgumentParser((Seq2SeqTrainingArguments, RunArguments))
 training_args, run_args = parser.parse_args_into_dataclasses()
 
-ctr_mode = run_args.ctr_mode
+if run_args.ctr_mode == "baseline":
+    ctr_mode = 0
+elif run_args.ctr_mode == "speaker":
+    ctr_mode = 1
+elif run_args.ctr_mode == "topic":
+    ctr_mode = 2
+elif run_args.ctr_mode == "multi":
+    ctr_mode = 3
 lamda = run_args.lamda
-model_name = run_args.model_name  # "facebook/bart-large"
+model_name = run_args.model_name
 batch_size = run_args.batch_size
 set_seed = run_args.set_seed
 cluster_mode = run_args.cluster_mode
@@ -411,7 +418,7 @@ class BartModel(BartPretrainedModel):
                 ctr_speaker_loss = torch.zeros(1, device=device)
                 ctr_topic_loss = torch.zeros(1, device=device)
 
-        elif ctr_mode == 3:  # koBART + Spaeker-view + Topic-view
+        elif ctr_mode == 3:  # koBART + Spaeker-Aware + Topic-Aware
             if len(speaker_idx) > 1:
                 # Speaker의 Encoder Representation -> Mean Pooling
                 enc_speaker = [encoder_outputs[0][0][i[0]:i[1]] for i in speaker_idx]

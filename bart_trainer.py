@@ -31,7 +31,14 @@ class RunArguments:
 parser = HfArgumentParser((Seq2SeqTrainingArguments, RunArguments))
 training_args, run_args = parser.parse_args_into_dataclasses()
 
-ctr_mode = run_args.ctr_mode
+if run_args.ctr_mode == "baseline":
+    ctr_mode = 0
+elif run_args.ctr_mode == "speaker":
+    ctr_mode = 1
+elif run_args.ctr_mode == "topic":
+    ctr_mode = 2
+elif run_args.ctr_mode == "multi":
+    ctr_mode = 3
 lamda = run_args.lamda
 model_name = run_args.model_name
 batch_size = run_args.batch_size
@@ -67,6 +74,7 @@ def compute_metrics(eval_pred):
         print(f"decoded_labels : {labels}")
         cnt += 1
 
+    # rouge score compute
     result = rouge.compute(
         predictions=decoded_preds,
         references=decoded_labels,
