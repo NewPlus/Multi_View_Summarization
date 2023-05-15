@@ -62,7 +62,7 @@ lamda = run_args.lamda
 model_name = run_args.model_name
 batch_size = run_args.batch_size
 set_seed = run_args.set_seed
-cluster_mode = 1
+cluster_mode = 0
 
 device = torch.device("cuda")
 print(f"device : {device}")

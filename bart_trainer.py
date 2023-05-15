@@ -14,7 +14,7 @@ from transformers import (
     HfArgumentParser,
 )
 
-from bart_customize.modeling_bart import BartForConditionalGeneration
+from modeling_bart import BartForConditionalGeneration
 
 
 @dataclass
@@ -42,6 +42,7 @@ lamda = run_args.lamda
 model_name = run_args.model_name
 batch_size = run_args.batch_size
 set_seed = run_args.set_seed
+cluster_mode = 0
 
 device = torch.device("cuda")
 print(f"trainer device : {device}")
@@ -104,7 +105,7 @@ class BartTrainer(Seq2SeqTrainer):
             all_special_ids=self.all_special_ids,
             raw_data=self.raw_data,
             ctr_mode=ctr_mode,
-            cluster_mode=1,
+            cluster_mode=cluster_mode,
         )
 
         # Save past state if it exists
