@@ -5,6 +5,17 @@
 - 2023.05.01
 - [PyTorch](https://pytorch.org/), [Huggingface](https://huggingface.co/)
 
+## Data
+- 영어
+    - [SAMSum Dataset](https://huggingface.co/datasets/samsum)
+    - train: 14732, val: 818, test: 819
+    - (Speaker : Utterance)의 형식으로 이루어진 Dialogue, Dialogue를 요약한 Summary로 구성된 데이터셋
+- 한국어
+    - AIHub의 [한국어 대화 요약](https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&aihubDataSe=realm&dataSetSn=117)
+    - train: 28352, val: 3152, test: 3502
+    - (Speaker : Utterance)의 형식으로 이루어진 Dialogue, Dialogue를 요약한 Summary로 구성된 데이터셋
+    - Speaker의 경우, P01, P02와 같은 형식으로 전처리되어 있음
+
 ## Model Architecture
 ![architecture](experimental_img/model_architecture.png)
 - BART 모델을 Summarization Task로 Fine-tuning
@@ -40,13 +51,24 @@ pip install -r requirements.txt
     - ctr_mode = "baseline"
 - Speaker-Aware Experiments
     - BART + Speaker-Aware
+    - Speaker Token의 Encoder Representation들을 Contrastive Learning
     - ctr_mode = "speaker"
 - Topic-Aware Experiments
     - BART + Topic-Aware
+    - Utterance Token의 Encoder Representation들을 K-Means로 Clustering
+    - Clustering된 Utterance Token의 Encoder Representation들을 Contrastive Learning
     - ctr_mode = "topic"
 - Multi-Aware Experiments
     - BART + Speaker-Aware + Topic-Aware
     - ctr_mode = "multi"
+
+## Run
+- Train
+    - 사전학습 모델 BART를 이용해 Fine-tuning
+    - arguments
+        - ctr_mode : train 방식 선택 ["baseline", "speaker", "topic", "multi"]
+        - lamda : Contrastive Learning Loss의 반영 비율
+        - set_seed : seed 값 설정
 
 - Example of Baseline
 ```
@@ -57,8 +79,8 @@ CUDA_VISIBLE_DEVICES=0 python bart_trainer.py \
 --lamda 0.08 \
 --batch_size 8 \
 --set_seed 100 \
---cluster_mode 1 \
 --output_dir "/root/bart_customize/test_save"
 ```
 
 # Results
+![result](experimental_img/result.png)

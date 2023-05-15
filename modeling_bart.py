@@ -1,11 +1,11 @@
 from typing import List, Optional, Tuple, Union
+import random
+
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
-
 from sklearn.cluster import KMeans
 import numpy as np
-import random
 import pandas as pd
 import datasets
 from transformers.utils import logging
@@ -43,12 +43,13 @@ class RunArguments:
     lamda: Optional[float] = field(default=0.08)
     batch_size: int = field(default=8)
     set_seed: int = field(default=100)
-    cluster_mode: int = field(default=1)
 
 
+# arguements parser from shell
 parser = HfArgumentParser((Seq2SeqTrainingArguments, RunArguments))
 training_args, run_args = parser.parse_args_into_dataclasses()
 
+# arguments from shell
 if run_args.ctr_mode == "baseline":
     ctr_mode = 0
 elif run_args.ctr_mode == "speaker":
@@ -61,7 +62,7 @@ lamda = run_args.lamda
 model_name = run_args.model_name
 batch_size = run_args.batch_size
 set_seed = run_args.set_seed
-cluster_mode = run_args.cluster_mode
+cluster_mode = 1
 
 device = torch.device("cuda")
 print(f"device : {device}")
@@ -69,17 +70,18 @@ print("Current cuda device:", torch.cuda.current_device())
 print("Count of using GPUs:", torch.cuda.device_count())
 logger = logging.get_logger(__name__)
 
-# 고정할 시드 값 설정
+# seed fix
 seed = set_seed
 random.seed(seed)
 
-# PyTorch 시드 고정
+# PyTorch seed fix
 torch.manual_seed(seed)
 
-# NumPy 시드 고정
+# NumPy seed fix
 np.random.seed(seed)
 
 
+# add ctr_loss(Type : torch.FloatTensor, Default : None) = Contrastive Learning Loss(Speaker + Topic)
 @dataclass
 class CustomSeq2SeqLMOutput(Seq2SeqLMOutput):
     loss: Optional[torch.FloatTensor] = None
@@ -94,6 +96,8 @@ class CustomSeq2SeqLMOutput(Seq2SeqLMOutput):
     ctr_loss: torch.FloatTensor = None
 
 
+# add ctr_speaker_loss(Type : torch.FloatTensor, Default : None) = Speaker-Aware Contrastive Learning Loss
+# add ctr_topic_loss(Type : torch.FloatTensor, Default : None) = Topic-Aware Contrastive Learning Loss
 @dataclass
 class CustomSeq2SeqModelOutput(Seq2SeqModelOutput):
     last_hidden_state: torch.FloatTensor = None
@@ -139,6 +143,9 @@ class BartModel(BartPretrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    # enc_speaker : Speaker tokens' Encoder Representations from Huggingface BartModel Encoder
+    # ctr_margin : Sigma of Contrastive Learning fomula
+    # speaker_input_dis : for discirminating what token is a speaker token
     def speaker_aware(self, enc_speaker, ctr_margin, speaker_input_ids, bench_speaker):
         enc_negative, enc_positive = [], []
 

@@ -14,18 +14,17 @@ from transformers import (
     HfArgumentParser,
 )
 
-from bartmodel import BartForConditionalGeneration
+from bart_customize.modeling_bart import BartForConditionalGeneration
 
 
 @dataclass
 class RunArguments:
     model_name: str = field(default="facebook/bart-large")
     data_name: str = field(default="samsum")
-    ctr_mode: int = field(default=3)
+    ctr_mode: str = field(default="baseline")
     lamda: Optional[float] = field(default=0.08)
     batch_size: int = field(default=8)
     set_seed: int = field(default=100)
-    cluster_mode: int = field(default=1)
 
 
 parser = HfArgumentParser((Seq2SeqTrainingArguments, RunArguments))
@@ -43,7 +42,6 @@ lamda = run_args.lamda
 model_name = run_args.model_name
 batch_size = run_args.batch_size
 set_seed = run_args.set_seed
-cluster_mode = run_args.cluster_mode
 
 device = torch.device("cuda")
 print(f"trainer device : {device}")
@@ -106,7 +104,7 @@ class BartTrainer(Seq2SeqTrainer):
             all_special_ids=self.all_special_ids,
             raw_data=self.raw_data,
             ctr_mode=ctr_mode,
-            cluster_mode=cluster_mode,
+            cluster_mode=1,
         )
 
         # Save past state if it exists
