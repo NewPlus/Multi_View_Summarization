@@ -3,7 +3,6 @@
 - 대화문(Dialogue)의 화자(Speaker)와 주제(Topic) 정보를 동시에 고려하는 다중 관점 대조 학습(Multi-Aware Contrastive Learning)을 추가하여 대화 요약 모델(Dialogue Summarization Model)의 성능을 향상
 - 한국정보과학회 제출 : [KCC2023](https://www.kiise.or.kr/conference/kcc/2023/)
 - 2023.05.01
-- [PyTorch](https://pytorch.org/), [Huggingface](https://huggingface.co/)
 
 ## Data
 - 영어
@@ -29,7 +28,7 @@
 .
 |-- README.md
 |-- bart_trainer.py
-|-- bartmodel.py
+|-- modeling_bart.py
 |-- experimental_img
 |   `-- model_architecture.png
 |-- requirements.txt
@@ -40,6 +39,20 @@
 
 # Tutorial
 ## Installation
+- requirements list
+```
+numpy
+pandas
+torch==1.12.1
+transformers==4.27.2
+datasets==2.10.0
+scikit-learn
+evaluate
+nltk
+rouge_score
+tqdm
+```
+
 - pip install requirements
 ```
 pip install -r requirements.txt
