@@ -2,7 +2,6 @@
 - Authors: Yonghwan Lee, Jinhyeong Lim, Hyeon-Je Song
 - 대화문(Dialogue)의 화자(Speaker)와 주제(Topic) 정보를 동시에 고려하는 다중 관점 대조 학습(Multi-Aware Contrastive Learning)을 추가하여 대화 요약 모델(Dialogue Summarization Model)의 성능을 향상
 - 한국정보과학회 제출 : [KCC2023](https://www.kiise.or.kr/conference/kcc/2023/)
-- 2023.05.01
 
 ## Data
 - 영어
