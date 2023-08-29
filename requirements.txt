@@ -1,6 +1,6 @@
 numpy
 pandas
-torch==1.12.1
+torch==1.13.1
 transformers==4.27.2
 datasets==2.10.0
 scikit-learn
